@@ -1,0 +1,64 @@
+# Example configuration. Run `phrak config` (recommended) or copy this to
+# <workspace>/.phrack/config.yaml. All PHRAK state (config, code index, learned
+# skills, reports, history) lives in that .phrack/ dir at the workspace root —
+# like .claude. The storage paths below are resolved relative to the workspace,
+# so ".phrack/rag" means "<workspace>/.phrack/rag".
+
+llm:
+  provider: ollama              # ollama (local) | anthropic (Claude API)
+  model: qwen2.5-coder:7b       # any pulled Ollama model
+  base_url: http://localhost:11434  # Ollama server URL
+  temperature: 0.1
+  num_ctx: 8192                # ollama context window
+  max_tokens: 16000            # anthropic only: output cap per response
+
+# Claude instead of a local model — `phrak config` and pick "anthropic":
+# llm:
+#   provider: anthropic
+#   model: claude-opus-5       # or claude-sonnet-5 / claude-haiku-4-5
+#   base_url: ""               # empty -> the SDK's own endpoint
+#   max_tokens: 16000
+# The API key is NEVER stored here. It lives in <workspace>/.phrack/credentials
+# (mode 0600) and is exported as ANTHROPIC_API_KEY at startup.
+
+rag:                           # codebase index powering `/ask`
+  persist_dir: .phrack/rag     # relative -> <workspace>/.phrack/rag
+  collection: phrak_code
+  recall_k: 6                  # chunks retrieved per question
+  chunk_lines: 60              # lines per indexed chunk
+  chunk_overlap: 10            # overlapping lines between chunks
+  max_file_kb: 256             # skip files larger than this
+  embeddings:                  # always local — Anthropic has no embeddings API
+    provider: default          # default (local, no pull) | ollama
+    model: nomic-embed-text    # used only by the ollama provider
+    base_url: ""               # ollama URL for embeddings; empty -> llm.base_url
+                               # when that's Ollama, else http://localhost:11434
+
+paths:
+  skills_dir: .phrack/skills   # relative -> <workspace>/.phrack/skills
+  reports_dir: .phrack/reports # relative -> <workspace>/.phrack/reports
+  workspace: .                 # root the file tools + code index operate under
+                               # (and where .phrack/ is anchored)
+  clones_dir: clones           # where `phrak clone` shallow-clones repos
+
+orchestrator:                  # how the multi-agent run is planned/executed
+  mode: dag                    # dag (dependency graph + parallel fan-out) | linear
+  max_concurrency: 3           # bounded parallel agents
+  continue_on_failure: true    # isolate a failed task; keep the rest going
+
+analyzers:                     # deterministic analyzers on/off
+  opengrep: true
+  dependency_audit: true
+
+max_steps: 40                  # per-round tool-call budget
+max_rounds: 4                  # run-to-completion: nudges until report is complete
+keep_reports: 50               # keep newest N reports; older auto-deleted (0 = all)
+enable_git_clone: false        # expose the guarded git_clone tool to agents
+
+# Per-agent model overrides. Any subset of the llm: fields above. Agents not
+# listed use the base llm: config.
+agent_models: {}
+#  threat_model:
+#    model: glm-4.7-flash        # bigger local model just for threat modeling
+#  code_review:
+#    temperature: 0.0

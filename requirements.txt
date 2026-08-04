@@ -1,0 +1,18 @@
+# Core (required)
+langchain>=1.0
+langchain-core>=1.0
+langchain-ollama
+langchain-anthropic # optional 'anthropic' provider — Claude via the Anthropic API
+langchain-chroma
+chromadb
+pyyaml
+rich                # styled terminal output (markdown rendering)
+
+# External CLI (not pip-managed here): Opengrep — https://opengrep.dev
+# powers the code-review agent's opengrep_scan / scan_secrets tools. Degrades
+# gracefully if its binary is absent.
+#
+# The LLM runs locally via Ollama (https://ollama.com) — install it separately
+# and pull a model, e.g. `ollama pull qwen2.5-coder:7b`. Alternatively, run
+# `phrak config` and choose the "anthropic" provider to use Claude instead; the
+# API key is stored in <workspace>/.phrack/credentials.

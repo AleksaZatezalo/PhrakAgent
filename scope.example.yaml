@@ -1,0 +1,22 @@
+# Example scope / target policy. Copy to <workspace>/.phrack/scope.yaml to make
+# "what am I allowed to touch" declarative and auditable. This can ONLY narrow
+# what is already permitted — the loopback-only floor is always enforced first
+# and is never weakened by anything here. A missing file means "no extra limits"
+# (loopback-only still applies).
+
+enabled: true                 # a present file defaults to enabled
+
+allowed_hosts:                # empty = any loopback host
+  - 127.0.0.1
+  - localhost
+
+allowed_ports:                # empty = any port
+  - 5000
+  - 8000
+
+allowed_paths:                # URL path prefixes; empty = any path
+  - /api
+denied_paths:                 # path prefixes always refused (wins over allowed)
+  - /api/admin
+
+rate_limit_per_min: 60        # max requests/min to the target (0 = unlimited)

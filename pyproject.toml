@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phrak-agent"
+version = "0.2.0"
+description = "Local AppSec multi-agent toolkit with codebase Q&A (RAG)"
+requires-python = ">=3.10"
+dependencies = [
+    "langchain>=1.0",
+    "langchain-core>=1.0",
+    "langchain-ollama",
+    "langchain-anthropic",   # optional 'anthropic' provider (Claude API)
+    "langchain-chroma",
+    "chromadb",
+    "pyyaml",
+    "rich",
+]
+
+[project.scripts]
+phrak = "appsec.cli:main"
+
+[tool.setuptools]
+packages = ["appsec", "appsec.agents", "appsec.tools", "appsec.models", "appsec.analyzers"]
+
+[tool.setuptools.package-data]
+appsec = ["skills/*/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q --strict-markers"
+markers = [
+    "integration: slow tests that need a running local target and/or Ollama. Run with -m integration.",
+]
+
+[tool.ruff]
+line-length = 90
+target-version = "py310"
