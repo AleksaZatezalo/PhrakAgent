@@ -374,6 +374,11 @@ workspace so PHRAK can answer "is this new or known?" and keep triage decisions:
   loopback-only floor is always enforced first and never weakened. See
   [`scope.example.yaml`](scope.example.yaml).
 
+- **Public log** — `.phrack/` never leaves your machine, so real findings worth
+  publishing get curated by hand into [`FINDINGS.md`](FINDINGS.md): what PHRAK
+  found, in what, and what happened after disclosure (plus a *Not findings*
+  table for leads that triage killed).
+
 ### Sample structured finding (Markdown render)
 
 ```
@@ -577,6 +582,12 @@ appsec/
 cli.py              thin shim so `python cli.py …` still works
 tests/              pytest bench (unit + marker-gated integration)
 ```
+
+## Security
+
+- **Found a vulnerability in PHRAK itself?** See [`SECURITY.md`](SECURITY.md) —
+  report it privately, don't open a public issue.
+- **Findings PHRAK has produced** are logged in [`FINDINGS.md`](FINDINGS.md).
 
 ## License
 
