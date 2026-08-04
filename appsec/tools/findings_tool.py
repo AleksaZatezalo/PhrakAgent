@@ -1,19 +1,7 @@
-"""The ``report_finding`` tool — structured, evidence-grounded findings.
-
-Lets an agent (currently ``code_review``) record a vulnerability as a validated
-:class:`~appsec.models.findings.SecurityFinding` instead of only prose. Every
-finding is:
-
-* structurally validated (severity/status/confidence/enum checks) — a
-  structurally-invalid finding is REJECTED so the model corrects and resubmits;
-* grounded in the workspace (evidence path inside the workspace, valid line
-  numbers) — a finding whose evidence can't be grounded is still recorded but
-  DOWNGRADED to ``unconfirmed`` (we never silently upgrade model claims);
-* recorded to the run-scoped collector (:mod:`appsec.runtime`) so the agent loop
-  can render/persist/verify them after the run.
-
-The agent still writes its Markdown report; this captures the machine-readable
-version alongside it.
+"""
+Description: The ``report_finding`` tool — structured, evidence-grounded findings.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
 """
 
 from __future__ import annotations

@@ -1,19 +1,7 @@
-"""Deterministic repo cloning (Phase 9) — ``phrak clone`` / ``/clone``.
-
-Shallow-clones a remote repository into a sandboxed clones area under the
-workspace, so a target can be pulled in for analysis with no model in the loop.
-Guardrails (all enforced here, not left to the caller):
-
-* HTTPS/SSH URLs only — no ``file://`` or local-path clones, no inline creds.
-* Shallow + single-branch by default (``--depth 1``).
-* git hooks disabled on clone (``core.hooksPath=/dev/null``); submodules are
-  NOT fetched unless ``recurse=True``.
-* a wall-clock timeout and a post-clone size cap.
-* the clone lands strictly inside ``<workspace>/<clones_dir>`` — a destination
-  that escapes it is refused.
-
-Cloned code is treated like any other workspace target: the same read-only tools
-and loopback/subprocess sandboxes apply.
+"""
+Description: Deterministic repo cloning (Phase 9) — ``phrak clone`` / ``/clone``.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

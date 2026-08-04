@@ -1,4 +1,8 @@
-"""Orchestrator planning and routing (no real LLM / agents needed)."""
+"""
+Description: Orchestrator planning and routing (no real LLM / agents needed).
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
+"""
 
 from __future__ import annotations
 

@@ -1,8 +1,7 @@
-"""Interactive-chat input helpers: readline setup and the /help renderer.
-
-Kept out of ``cli.py`` so the command layer stays focused on dispatch. These
-functions handle Tab-completion of slash commands, prefix-filtered history
-navigation, persistent history, and rendering the command list.
+"""
+Description: Interactive-chat input helpers: readline setup and the /help renderer.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

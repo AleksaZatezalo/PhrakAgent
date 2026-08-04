@@ -1,14 +1,7 @@
-"""Declarative scope / target policy (Phase 7).
-
-The per-call loopback guard (:func:`appsec.tools.common.is_local`) answers "is
-this host local?" but nothing more. A scope policy makes "what am I allowed to
-touch" **declarative and auditable**: allowed hosts / ports / path prefixes and a
-request rate limit, loaded from ``<workspace>/.phrack/scope.yaml``.
-
-Crucially, scope can only ever *narrow* what is already permitted — the loopback
-floor is enforced separately and independently in ``guard_local`` and is never
-weakened here. An absent or malformed scope file means "no extra restrictions"
-(loopback-only still applies).
+"""
+Description: Declarative scope / target policy (Phase 7).
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

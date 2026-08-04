@@ -1,12 +1,7 @@
-"""Learned-skills store — agent-authored procedures saved as markdown files.
-
-Reusable procedures live under ``<workspace>/.phrack/skills`` as markdown so a
-good approach discovered once can be reloaded verbatim later. Simple and
-dependency-free: files on disk plus cheap lexical relevance over their text.
-
-This is distinct from :mod:`appsec.skill_library` (the *curated* skills that ship
-with the code under ``appsec/skills/<agent>/``) — that library is baked into each
-agent's system prompt, whereas these are the mutable, user-authored ones.
+"""
+Description: Learned-skills store — agent-authored procedures saved as markdown files.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

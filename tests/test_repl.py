@@ -1,4 +1,8 @@
-"""REPL command list + /help rendering."""
+"""
+Description: REPL command list + /help rendering.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
+"""
 
 from __future__ import annotations
 

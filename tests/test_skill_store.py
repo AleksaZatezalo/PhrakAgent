@@ -1,4 +1,8 @@
-"""Learned-skills store: write/read/list + lexical relevance + prompt block."""
+"""
+Description: Learned-skills store: write/read/list + lexical relevance + prompt block.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
+"""
 
 from __future__ import annotations
 

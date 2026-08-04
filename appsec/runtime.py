@@ -1,8 +1,7 @@
-"""Process-wide runtime context.
-
-Tools are plain functions (LangChain ``@tool``) and can't easily receive the
-config through the agent loop, so we stash the live objects here at startup and
-let tools read them. Set once via :func:`init_runtime`.
+"""
+Description: Process-wide runtime context.
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
 """
 
 from __future__ import annotations

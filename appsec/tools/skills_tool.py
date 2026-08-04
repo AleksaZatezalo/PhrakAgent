@@ -1,8 +1,7 @@
-"""The ``load_skill`` tool — lets an agent read one of its curated skills.
-
-The agent sees only a one-line index of its skills in the system prompt (cheap);
-this tool returns the full procedure for a named skill on demand, scoped to the
-currently-active agent so one specialist can't load another's playbook.
+"""
+Description: The ``load_skill`` tool — lets an agent read one of its curated skills.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
 """
 
 from __future__ import annotations

@@ -1,8 +1,7 @@
-"""Read-only filesystem tools, sandboxed to the configured workspace root.
-
-Every path is resolved and checked to stay within ``paths.workspace`` (see
-:func:`appsec.tools.common.resolve_in_workspace`) so agents can't wander outside
-the target project. These tools never write or execute.
+"""
+Description: Read-only filesystem tools, sandboxed to the configured workspace root.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

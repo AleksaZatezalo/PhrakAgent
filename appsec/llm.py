@@ -1,13 +1,7 @@
-"""Chat-model factory.
-
-PHRAK defaults to a local Ollama server; ``anthropic`` (Claude) is the opt-in
-cloud alternative. Both client classes are lazy-imported so importing this
-module stays cheap and a missing optional dependency only bites the provider
-that needs it.
-
-The Anthropic client takes no key here: ``credentials.load_into_env`` has
-already exported ``ANTHROPIC_API_KEY`` into the process environment from
-``.phrack/credentials``, and the SDK reads it from there.
+"""
+Description: Chat-model factory.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

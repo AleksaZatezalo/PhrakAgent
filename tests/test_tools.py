@@ -1,4 +1,8 @@
-"""Tool behaviour + safety guards (filesystem, analysis)."""
+"""
+Description: Tool behaviour + safety guards (filesystem, analysis).
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
+"""
 
 from __future__ import annotations
 

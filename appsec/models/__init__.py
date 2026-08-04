@@ -1,4 +1,8 @@
-"""Structured data models shared across PHRAK (findings, taint paths)."""
+"""
+Description: Structured data models shared across PHRAK (findings, taint paths).
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
+"""
 
 from __future__ import annotations
 

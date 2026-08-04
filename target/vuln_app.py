@@ -1,3 +1,9 @@
+"""
+Description: Deliberately vulnerable sample app used as a local analysis target.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
+"""
+
 import sqlite3
 from flask import Flask, request
 

@@ -1,7 +1,7 @@
-"""Static-analysis helpers used by the threat-modeling / dynamic-scan agents.
-
-All passive: they read the codebase to understand its architecture (frameworks,
-dependencies, HTTP routes). No network activity.
+"""
+Description: Static-analysis helpers used by the threat-modeling / dynamic-scan agents.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
 """
 
 from __future__ import annotations

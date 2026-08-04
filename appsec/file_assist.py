@@ -1,16 +1,7 @@
-"""Helpers that keep an agent moving when a weak local model stalls.
-
-Two behaviours, extracted from the Agent loop so they're independently testable:
-
-* :func:`workspace_overview` — a listing of the real files in the workspace,
-  front-loaded into the first turn so the model reads actual files instead of
-  hallucinating names (e.g. asking for a non-existent ``app.py``).
-* :func:`maybe_satisfy_file_request` — when the model asks the human to *paste*
-  code instead of calling ``read_file``, read the referenced (or, failing that,
-  the workspace's) source files itself and pack them for re-feeding.
-
-These operate on a plain list of tools, so they can be unit-tested without an
-Agent, an LLM, or the checkpointer.
+"""
+Description: Helpers that keep an agent moving when a weak local model stalls.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
 """
 
 from __future__ import annotations

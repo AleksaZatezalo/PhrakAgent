@@ -1,13 +1,7 @@
-"""Curated, agent-scoped skills bundled with PHRAK.
-
-Unlike learned skills (stored under ``<workspace>/.phrack/skills`` at runtime),
-these ship with the code under ``appsec/skills/<agent>/<name>.md`` and encode the
-baseline methodology each specialist should follow.
-
-Each file has YAML frontmatter (``name``, ``when_to_use``) and a markdown body.
-To keep the context window small, an agent only ever sees a one-line *index* of
-its skills in the system prompt; it pulls a full procedure on demand with the
-``load_skill`` tool (see :mod:`appsec.tools.skills_tool`).
+"""
+Description: Curated, agent-scoped skills bundled with PHRAK.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
 """
 
 from __future__ import annotations

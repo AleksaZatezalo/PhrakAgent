@@ -1,8 +1,7 @@
-"""Local AppSec multi-agent system + codebase Q&A.
-
-Specialist agents (Code Review, Threat Modeling, Test-Case generation)
-coordinated by an orchestrator, with curated + learned skills and a RAG index
-over the working directory (`/ask`). Configure it with ``phrak config``.
+"""
+Description: Local AppSec multi-agent system + codebase Q&A.
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
 """
 
 __version__ = "0.2.0"

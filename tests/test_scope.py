@@ -1,4 +1,8 @@
-"""Scope / target policy (appsec.scope) — Phase 7."""
+"""
+Description: Scope / target policy (appsec.scope) — Phase 7.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
+"""
 
 from __future__ import annotations
 

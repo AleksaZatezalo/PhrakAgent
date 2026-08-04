@@ -1,8 +1,7 @@
-"""Tools that let an agent pause to talk to the human without ending its run.
-
-An agent keeps working toward a complete report; when it genuinely needs a
-decision it calls one of these. The prompt is rendered in the sub-agent style
-(see appsec/ui.py) so it's clear which specialist is asking.
+"""
+Description: Tools that let an agent pause to talk to the human without ending its run.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

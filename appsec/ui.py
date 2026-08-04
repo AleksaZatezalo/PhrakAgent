@@ -1,9 +1,7 @@
-"""Terminal UI: animated spinners and styled sub-agent prompts.
-
-Spinners run on a background thread while an agent thinks. Sub-agent questions
-and permission requests get a distinct colored box (magenta = question, yellow =
-permission) so it's obvious a *specialist agent* is asking — not the main prompt.
-All of this degrades to no-ops / plain text when output isn't a TTY.
+"""
+Description: Terminal UI: animated spinners and styled sub-agent prompts.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

@@ -1,16 +1,7 @@
-"""API keys for cloud model providers, stored inside the workspace's ``.phrack``.
-
-PHRAK is local-first, but the ``anthropic`` provider needs a key. It lives in
-``<workspace>/.phrack/credentials`` — deliberately **not** in ``config.yaml``,
-which ``phrak config --show`` prints and which the RAG indexer embeds (``.phrack``
-is indexed on purpose so ``/ask`` can answer questions about reports and config).
-The credentials file is created ``0600`` and has no indexed extension, so it is
-never chunked into the vector store.
-
-At startup :func:`load_into_env` exports each stored key as a process-wide
-environment variable — ``ANTHROPIC_API_KEY`` for ``anthropic`` — which is where
-the provider SDK looks for it. Nothing downstream has to thread a key through:
-the chat-model factory just builds the client and the SDK picks the key up.
+"""
+Description: API keys for cloud model providers, stored inside the workspace's ``.phrack``.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

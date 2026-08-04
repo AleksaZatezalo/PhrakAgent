@@ -1,14 +1,7 @@
-"""Shared helpers for PHRAK tools.
-
-Centralises the three things every tool needs so they aren't re-implemented (and
-subtly diverging) across modules:
-
-* **Workspace sandboxing** — resolve a path under the configured workspace and
-  reject anything that escapes it.
-* **Subprocess execution** — run an external CLI with a timeout and uniform
-  error handling (missing binary / timeout / crash).
-* **Loopback guard** — normalise a URL and refuse any non-loopback host, so
-  network tools can only ever touch a locally-running target.
+"""
+Description: Shared helpers for PHRAK tools.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

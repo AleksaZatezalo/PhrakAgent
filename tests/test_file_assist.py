@@ -1,4 +1,8 @@
-"""File-assist: workspace overview + rescuing a model that asks for pasted code."""
+"""
+Description: File-assist: workspace overview + rescuing a model that asks for pasted code.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
+"""
 
 from __future__ import annotations
 

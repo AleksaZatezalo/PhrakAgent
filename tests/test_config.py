@@ -1,4 +1,8 @@
-"""Config loading, serialization, and per-agent overrides."""
+"""
+Description: Config loading, serialization, and per-agent overrides.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
+"""
 
 from __future__ import annotations
 

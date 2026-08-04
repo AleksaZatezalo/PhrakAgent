@@ -1,21 +1,7 @@
-"""Persistent finding & taint-path history (Phase 7).
-
-Findings and taint paths are captured per-run in memory (:mod:`appsec.runtime`)
-and rendered into each report. This module makes them **durable across runs** so
-PHRAK can answer "is this new or known?", track how a finding's status changed
-over time, keep human triage decisions, and re-surface a finding when new
-evidence materially changes it.
-
-Storage is dependency-free JSONL under the workspace ``.phrack/`` dir:
-
-* ``.phrack/findings/findings.jsonl`` — one record per unique fingerprint.
-* ``.phrack/taint/taint.jsonl`` — one record per unique taint-path id.
-
-Each record keeps the latest snapshot plus provenance: first/last seen, a
-per-run log, a status-change history, and free-form reviewer notes. The three
-status tracks (agent / runtime / human) live on the snapshot itself (see
-:class:`~appsec.models.findings.SecurityFinding`); this store records *when* and
-*by whom* each track changed.
+"""
+Description: Persistent finding & taint-path history (Phase 7).
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
 """
 
 from __future__ import annotations

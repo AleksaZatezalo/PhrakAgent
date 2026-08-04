@@ -1,4 +1,8 @@
-"""Structured finding & taint-path models (appsec.models.findings)."""
+"""
+Description: Structured finding & taint-path models (appsec.models.findings).
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
+"""
 
 from __future__ import annotations
 

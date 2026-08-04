@@ -1,4 +1,8 @@
-"""Provider API keys: stored under .phrack, exported as env vars, never leaked."""
+"""
+Description: Provider API keys: stored under .phrack, exported as env vars, never leaked.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
+"""
 
 from __future__ import annotations
 

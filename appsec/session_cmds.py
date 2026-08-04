@@ -1,9 +1,7 @@
-"""Pure helpers for the interactive session commands (Phase 9).
-
-Kept dependency-light and side-effect-free where possible so they're unit
-testable: inline ``@path`` expansion, the ``/tools`` + ``/tool`` catalog, and the
-``/copy`` clipboard shim. The stateful bits (rebuilding the chat graph, history
-search) live on :class:`~appsec.chat.ChatSession` / in the REPL loop.
+"""
+Description: Pure helpers for the interactive session commands (Phase 9).
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

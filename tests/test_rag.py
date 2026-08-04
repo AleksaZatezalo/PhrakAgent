@@ -1,7 +1,7 @@
-"""Codebase RAG index: file discovery + chunking (pure logic, no embeddings).
-
-The vector store is built lazily, so these exercise ``_iter_files`` / ``_chunk``
-without loading an embedding model or hitting the network.
+"""
+Description: Codebase RAG index: file discovery + chunking (pure logic, no embeddings).
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
 """
 
 from __future__ import annotations

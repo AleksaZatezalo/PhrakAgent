@@ -1,19 +1,7 @@
-"""Structured security-finding & taint-path models.
-
-The backbone of PHRAK's evidence-based analysis: every agent, analyzer, and the
-taint engine can emit / consume :class:`SecurityFinding` objects instead of only
-free-form Markdown. This gives us stable fingerprints (for history &
-deduplication across runs), typed validation, workspace-grounded evidence checks,
-and consistent Markdown rendering.
-
-Design notes
-------------
-* Pure stdlib (dataclasses + hashlib + datetime) — no new dependencies, matching
-  the project's dataclass convention (see :mod:`appsec.config`).
-* All model output is untrusted: :func:`validate_finding` and
-  :func:`validate_against_workspace` never trust LLM-provided paths/lines/claims.
-* Confidence is a static heuristic in [0.0, 1.0]; it is NOT a probability of
-  exploitability. Runtime/deterministic corroboration is tracked separately.
+"""
+Description: Structured security-finding & taint-path models.
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
 """
 
 from __future__ import annotations

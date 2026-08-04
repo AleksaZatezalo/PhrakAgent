@@ -1,4 +1,8 @@
-"""Phase 9 usability & extensibility: skills/clone/session helpers."""
+"""
+Description: Phase 9 usability & extensibility: skills/clone/session helpers.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
+"""
 
 from __future__ import annotations
 

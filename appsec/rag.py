@@ -1,13 +1,7 @@
-"""Codebase RAG — ask questions grounded in the working-directory code & docs.
-
-A :class:`CodeIndex` walks the workspace, splits each source/doc file into
-line-windowed chunks, and embeds them into a persistent Chroma collection. It
-syncs incrementally (only re-embedding files whose mtime changed, dropping chunks
-for deleted files), so repeated ``/ask`` calls stay cheap.
-
-``ask`` retrieves the most relevant chunks and asks the LLM to answer using ONLY
-that context, citing sources as ``path:start-end`` so every claim is traceable
-back to the code.
+"""
+Description: Codebase RAG — ask questions grounded in the working-directory code & docs.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

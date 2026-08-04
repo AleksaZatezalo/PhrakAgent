@@ -1,7 +1,7 @@
-"""PHRAK Agent — startup banner and hacker-aesthetic terminal styling.
-
-Colors are disabled automatically when output isn't a TTY or when NO_COLOR is
-set, so piped output stays clean.
+"""
+Description: PHRAK Agent — startup banner and hacker-aesthetic terminal styling.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

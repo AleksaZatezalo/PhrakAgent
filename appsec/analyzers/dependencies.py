@@ -1,17 +1,7 @@
-"""Dependency-audit adapter — known-vulnerable dependency versions.
-
-Runs the ecosystem's native auditor over the manifests found under the target and
-normalizes each advisory into a ``vulnerable-dependency`` :class:`SecurityFinding`
-whose evidence points at the manifest. Supported:
-
-* **pip-audit** — Python (`requirements*.txt`, `pyproject.toml`, `Pipfile`)
-* **npm audit** — Node (`package.json`)
-* **govulncheck** — Go (`go.mod`)
-* **cargo audit** — Rust (`Cargo.toml` / `Cargo.lock`)
-
-Every auditor is optional: if its binary is absent the ecosystem is skipped with a
-note (the run never fails). Auditors query an advisory database, which may require
-network access — that is the auditor's behaviour, surfaced honestly to the caller.
+"""
+Description: Dependency-audit adapter — known-vulnerable dependency versions.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

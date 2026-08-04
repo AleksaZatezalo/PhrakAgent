@@ -1,11 +1,7 @@
-"""Conversational chat session — talk to PHRAK like you talk to Claude Code.
-
-A single continuous conversation backed by one tool-calling agent that keeps
-message history across turns (LangGraph checkpointer) and can use every tool
-mid-conversation: read code, scan, propose fixes, query the codebase index, etc.
-
-Slash-style shortcuts still work for power users (see cli.py), but the default
-experience is: type, get an answer, keep going.
+"""
+Description: Conversational chat session — talk to PHRAK like you talk to Claude Code.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

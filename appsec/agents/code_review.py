@@ -1,4 +1,8 @@
-"""Code Review agent — finds security vulnerabilities in source code."""
+"""
+Description: Code Review agent — finds security vulnerabilities in source code.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
+"""
 
 from __future__ import annotations
 

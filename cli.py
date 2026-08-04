@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Thin shim so ``python cli.py ...`` keeps working after packaging.
-
-The real CLI lives in :mod:`appsec.cli` (exposed as the ``phrak`` console script).
+"""
+Description: Thin shim so ``python cli.py ...`` keeps working after packaging.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
 """
 
 from appsec.cli import main

@@ -1,17 +1,7 @@
-"""Opengrep wrappers — static analysis and secrets scanning via Opengrep.
-
-Opengrep is the open-source (LGPL) fork of Semgrep OSS; its ``scan`` subcommand
-and ``--json`` output are drop-in compatible, so this module shells out to the
-locally installed ``opengrep`` with JSON output and summarizes findings as
-``file:line [severity] rule -> message``. Opengrep is PHRAK's sole static
-analyzer — Semgrep, CodeQL, and Joern were removed in favour of it.
-
-Unlike Semgrep, Opengrep sends no telemetry and needs no login, so there are no
-``--metrics``/``--disable-version-check`` flags. Rules come from ``--config``:
-a local rules file/dir, the Opengrep registry shorthand, or ``auto``. Point it at
-a bundled/local ruleset for fully-offline scans.
-
-The ``opengrep`` binary is resolved from ``$PHRAK_OPENGREP_BIN`` if set, else PATH.
+"""
+Description: Opengrep wrappers — static analysis and secrets scanning via Opengrep.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

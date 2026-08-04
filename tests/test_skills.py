@@ -1,4 +1,8 @@
-"""Curated agent skills: library loading, scoping, and the load_skill tool."""
+"""
+Description: Curated agent skills: library loading, scoping, and the load_skill tool.
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
+"""
 
 from __future__ import annotations
 

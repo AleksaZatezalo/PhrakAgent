@@ -1,4 +1,8 @@
-"""Persistent finding & taint history store (appsec.store) — Phase 7."""
+"""
+Description: Persistent finding & taint history store (appsec.store) — Phase 7.
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
+"""
 
 from __future__ import annotations
 

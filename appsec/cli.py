@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
-"""PHRAK Agent — command-line entry point for the AppSec multi-agent system.
-
-Installed as the ``phrak`` console command (see pyproject). Examples:
-
-    phrak config                                 # interactive setup (no AI)
-    phrak agents                                 # list available agents
-    phrak run "Assess the app in ./target for security issues"
-    phrak agent code_review "Review ./target for injection bugs"
-    phrak ask "where is user input validated?"   # RAG over the workspace
+"""
+Description: PHRAK Agent — command-line entry point for the AppSec multi-agent system.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

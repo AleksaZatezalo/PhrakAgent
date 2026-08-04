@@ -1,9 +1,7 @@
-"""Shared pytest fixtures for the PHRAK test bench.
-
-The core system uses a process-wide runtime singleton (``appsec.runtime.RUNTIME``)
-that tools read config from. The ``runtime`` fixture wires that up against temp
-directories and tears it down afterwards, so tool tests are hermetic and don't
-touch the user's real config/workspace.
+"""
+Description: Shared pytest fixtures for the PHRAK test bench.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
 """
 
 from __future__ import annotations

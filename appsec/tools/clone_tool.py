@@ -1,10 +1,7 @@
-"""Guarded ``git_clone`` tool (Phase 9) — off unless ``enable_git_clone``.
-
-Lets a run pull a dependency's source into the sandboxed clones area for
-analysis. It is a thin wrapper over :func:`appsec.clone.clone_repo`, so all the
-same guardrails apply (https/ssh only, shallow, hooks disabled, size cap, stays
-inside the workspace clones dir). Not added to any agent's toolset unless the
-operator opts in via config, since it reaches the network.
+"""
+Description: Guarded ``git_clone`` tool (Phase 9) — off unless ``enable_git_clone``.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

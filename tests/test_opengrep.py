@@ -1,8 +1,7 @@
-"""Opengrep analyzer adapter (appsec.tools.opengrep_tools).
-
-Exercises the pure parsing/format logic, exclude-arg construction, honest
-exit-code handling, and the graceful "not installed" path — without invoking a
-real opengrep binary (fast + hermetic; the CLI is mocked).
+"""
+Description: Opengrep analyzer adapter (appsec.tools.opengrep_tools).
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

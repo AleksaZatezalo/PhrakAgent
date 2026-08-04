@@ -1,7 +1,7 @@
-"""Phase 6 — analyzer normalization, dependency audit, sanitizer tables.
-
-Pure/parsing logic and the finding pipeline are exercised with mocked analyzer
-output — no real opengrep / pip-audit / npm / cargo / govulncheck binary is run.
+"""
+Description: Phase 6 — analyzer normalization, dependency audit, sanitizer tables.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

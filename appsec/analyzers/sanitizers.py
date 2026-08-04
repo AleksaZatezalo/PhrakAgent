@@ -1,22 +1,7 @@
-"""Context-sensitive sanitizer effectiveness table.
-
-A sanitizer is only a sanitizer *against a specific sink class, in a specific
-context*. Encoding that here lets the reviewing agent avoid the most common
-**false-sanitizer** mistakes — treating a control as protective when it isn't:
-
-* HTML-escaping (`html.escape`) makes output safe for an HTML context — it does
-  **not** make a value SQL-, shell-, path-, or URL-safe.
-* `shlex.quote` is fragile with `shell=True`; the robust fix is an argument array
-  (`shell=False`), where a shell never parses the value at all.
-* Authentication (proving identity) is **not** authorization (access control): an
-  authenticated user can still reach another user's object (IDOR/BOLA).
-* Parsing a URL (`urlparse`) does **not** make a request SSRF-safe — DNS
-  rebinding, redirects, and encoded/alternate IPs bypass a naive parse.
-* A prefix check *before* canonicalization is bypassable (`../`, symlinks); you
-  must canonicalize (`realpath`) **then** check the prefix.
-
-:func:`assess` answers "does <sanitizer> mitigate <vuln class> here?" and, crucially,
-flags a **false assumption** when the answer is "no but people think yes".
+"""
+Description: Context-sensitive sanitizer effectiveness table.
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
 """
 
 from __future__ import annotations

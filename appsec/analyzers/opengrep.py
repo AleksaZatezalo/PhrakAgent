@@ -1,10 +1,7 @@
-"""Opengrep adapter — normalizes Opengrep JSON leads into SecurityFindings.
-
-Reuses the CLI invocation in :mod:`appsec.tools.opengrep_tools` (so there is one
-place that knows how to run Opengrep safely) and maps each JSON result into a
-:class:`SecurityFinding` with an ``analyzer_hit`` evidence item. Findings come
-back as leads: status ``unconfirmed`` and capped confidence, to be confirmed by an
-agent reading the code.
+"""
+Description: Opengrep adapter — normalizes Opengrep JSON leads into SecurityFindings.
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
 """
 
 from __future__ import annotations

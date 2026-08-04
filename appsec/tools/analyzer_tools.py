@@ -1,9 +1,7 @@
-"""Phase-6 analyzer tools — normalized analyzer leads + a false-sanitizer check.
-
-Unlike ``opengrep_scan`` (which returns text leads), these tools push their
-results through the structured-finding pipeline: normalize → validate → ground →
-dedupe → record into the run collector, so analyzer output is deduped and rendered
-alongside the findings an agent reports by hand.
+"""
+Description: Phase-6 analyzer tools — normalized analyzer leads + a false-sanitizer check.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

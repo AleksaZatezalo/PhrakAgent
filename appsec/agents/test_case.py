@@ -1,10 +1,7 @@
-"""Test-Case agent — turns findings + threats into a security test plan.
-
-It slots into the swarm after code_review and threat_model: the orchestrator
-feeds their confirmed findings and STRIDE threats forward as context, and this
-agent converts them — plus the source it reads itself — into a concrete,
-prioritized list of security TEST CASES for the operator to investigate and
-verify manually. PHRAK does NOT run the tests; it produces the checklist.
+"""
+Description: Test-Case agent — turns findings + threats into a security test plan.
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
 """
 
 from __future__ import annotations

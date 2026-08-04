@@ -1,12 +1,7 @@
-"""Base agent + registry.
-
-An agent is fully described by an :class:`AgentSpec` (name, description, system
-prompt, and a factory that returns its tools). Registering one is a single call,
-so adding a new specialist never requires touching the orchestrator or core loop.
-
-Each run: inject relevant learned skills -> run a tool-calling loop -> return the
-finished report. Curated per-agent skills (see :mod:`appsec.skill_library`) are
-always available on demand via the ``load_skill`` tool.
+"""
+Description: Base agent + registry.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

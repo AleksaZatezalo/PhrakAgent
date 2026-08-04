@@ -1,14 +1,7 @@
-"""Middleware that rescues tool calls from models that "verbalize" them.
-
-Some local models (e.g. qwen2.5-coder via Ollama) don't emit native structured
-``tool_calls`` — they print the call as JSON (or inside ``<tool_call>`` tags) in
-the message content. LangChain's agent loop then never executes the tool.
-
-:class:`VerbalizedToolCallMiddleware` hooks ``wrap_model_call``, and when the
-model returned no real tool calls but its content contains a well-formed call
-that names one of the bound tools, it converts that into a proper tool call so
-the agent can execute it. This makes the whole system robust across weaker local
-models without changing any agent code.
+"""
+Description: Middleware that rescues tool calls from models that "verbalize" them.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

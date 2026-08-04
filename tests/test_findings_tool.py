@@ -1,4 +1,8 @@
-"""The report_finding tool: validation, workspace grounding, and capture."""
+"""
+Description: The report_finding tool: validation, workspace grounding, and capture.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
+"""
 
 from __future__ import annotations
 

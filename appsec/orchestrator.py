@@ -1,9 +1,7 @@
-"""Orchestrator — plans and coordinates the specialist agents.
-
-Given a high-level AppSec request it: (1) asks the LLM to produce a plan mapping
-sub-tasks to registered agents, (2) runs each step, feeding accumulated findings
-forward as context, and (3) synthesizes a consolidated report. Because it reads
-the live agent registry, newly added agents become routable with no change here.
+"""
+Description: Orchestrator — plans and coordinates the specialist agents.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

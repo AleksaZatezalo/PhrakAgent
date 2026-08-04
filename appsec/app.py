@@ -1,8 +1,7 @@
-"""Application bootstrap — build the fully wired system from config.
-
-One call, :func:`build_app`, returns everything the CLI needs: the LLM, the
-learned-skills store, the codebase index, orchestrator, and registry, with the
-built-in agents loaded.
+"""
+Description: Application bootstrap — build the fully wired system from config.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

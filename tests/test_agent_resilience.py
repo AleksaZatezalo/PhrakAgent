@@ -1,9 +1,7 @@
-"""A turn that dies must not take the whole task with it.
-
-Both providers hit this, for different reasons: a small local model loops on
-tool calls until the graph's step budget runs out, and a hosted model can drop a
-turn on a rate limit or a context overflow. Either way the agent should keep what
-it gathered and the run should end with a report, not an exception.
+"""
+Description: A turn that dies must not take the whole task with it.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

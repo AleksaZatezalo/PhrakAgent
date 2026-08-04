@@ -1,15 +1,7 @@
-"""Configuration loading and the interactive setup wizard.
-
-The whole system is driven by a single YAML file that lives — along with all
-generated data (code index, learned skills, reports, history) — inside a
-``.phrack/`` directory at the workspace root, mirroring how ``.claude`` works.
-Nothing is written outside it, so a workspace is self-describing and trivial to
-.gitignore.
-
-PHRAK defaults to running fully local against an Ollama server. Claude via the
-Anthropic API is an opt-in alternative provider: the model and endpoint are
-configured here, while the API key is kept out of this file entirely — see
-``credentials.py``.
+"""
+Description: Configuration loading and the interactive setup wizard.
+Author: Aleksa Zatezalo
+Date Created: 08-01-2026
 """
 
 from __future__ import annotations

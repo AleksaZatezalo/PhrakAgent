@@ -1,4 +1,8 @@
-"""Shared tool helpers: workspace sandbox, subprocess runner, loopback guard."""
+"""
+Description: Shared tool helpers: workspace sandbox, subprocess runner, loopback guard.
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
+"""
 
 from __future__ import annotations
 

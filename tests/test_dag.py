@@ -1,4 +1,8 @@
-"""DAG orchestration: planning, parallel fan-out, partial-failure (Phase 8)."""
+"""
+Description: DAG orchestration: planning, parallel fan-out, partial-failure (Phase 8).
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
+"""
 
 from __future__ import annotations
 

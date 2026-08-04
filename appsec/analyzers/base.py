@@ -1,11 +1,7 @@
-"""AnalyzerAdapter protocol + shared normalization plumbing.
-
-An adapter turns one external analyzer into validated, workspace-grounded
-:class:`SecurityFinding` objects. :func:`finalize_findings` is the single choke
-point every adapter's output passes through: structural validation (drop the
-structurally-invalid), workspace grounding (**downgrade** to ``unconfirmed`` when
-evidence can't be located — never silently upgrade), and fingerprint dedup. This
-is the same discipline ``report_finding`` applies to agent-authored findings.
+"""
+Description: AnalyzerAdapter protocol + shared normalization plumbing.
+Author: Aleksa Zatezalo
+Date Created: 07-30-2026
 """
 
 from __future__ import annotations

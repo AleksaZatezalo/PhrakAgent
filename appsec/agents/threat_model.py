@@ -1,4 +1,8 @@
-"""Threat Modeling agent — STRIDE / DFD-based threat analysis."""
+"""
+Description: Threat Modeling agent — STRIDE / DFD-based threat analysis.
+Author: Aleksa Zatezalo
+Date Created: 07-31-2026
+"""
 
 from __future__ import annotations
 

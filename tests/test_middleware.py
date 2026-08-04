@@ -1,4 +1,8 @@
-"""Rescuing verbalized tool calls from models that don't emit structured calls."""
+"""
+Description: Rescuing verbalized tool calls from models that don't emit structured calls.
+Author: Aleksa Zatezalo
+Date Created: 07-29-2026
+"""
 
 from __future__ import annotations
 
