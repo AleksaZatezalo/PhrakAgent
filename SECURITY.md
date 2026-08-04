@@ -72,8 +72,9 @@ code and feeds it to a model** — so the surfaces that matter are:
 
 * **Wrong analysis results.** Missed vulnerabilities (false negatives) and bogus
   ones (false positives) are detection-quality bugs, not security
-  vulnerabilities — open a normal issue. Interesting ones end up in the *Not
-  findings* table in [`FINDINGS.md`](FINDINGS.md).
+  vulnerabilities — open a normal issue using the *Detection quality* template.
+  Interesting ones end up in the *Not findings* table in
+  [`FINDINGS.md`](FINDINGS.md).
 * **Model output that is merely incorrect, offensive, or hallucinated.** PHRAK's
   findings are leads for a human to verify; the README says so.
 * Issues requiring a maliciously modified local config, a hostile

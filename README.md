@@ -589,6 +589,14 @@ tests/              pytest bench (unit + marker-gated integration)
   report it privately, don't open a public issue.
 - **Findings PHRAK has produced** are logged in [`FINDINGS.md`](FINDINGS.md).
 
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) — dev setup, the `black` / `ruff` style
+rules, the mandatory module-header docstring, and the architecture invariants a
+PR must not break (read-only agents, no network without opt-in, Opengrep as the
+sole static analyzer). False positives and missed findings belong in a normal
+issue; vulnerabilities in PHRAK itself go to [`SECURITY.md`](SECURITY.md).
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE).

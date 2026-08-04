@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability in PHRAK itself
+    url: https://github.com/AleksaZatezalo/PhrakAgent/security/advisories/new
+    about: Report it privately here, never as a public issue. See SECURITY.md for scope.
+  - name: Contributing guide
+    url: https://github.com/AleksaZatezalo/PhrakAgent/blob/main/CONTRIBUTING.md
+    about: Dev setup, style, the module-header convention, and the architecture invariants.
+  - name: Findings attributed to PHRAK
+    url: https://github.com/AleksaZatezalo/PhrakAgent/blob/main/FINDINGS.md
+    about: The public log of vulnerabilities discovered with PHRAK.
