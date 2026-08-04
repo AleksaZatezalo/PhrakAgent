@@ -29,10 +29,12 @@ def _result(root: Path, name: str, line: int, sev: str, check: str, msg: str) ->
 
 def test_format_orders_by_severity_and_relativizes(runtime):
     root = Path(runtime.paths.workspace).resolve()
-    data = {"results": [
-        _result(root, "a.py", 5, "WARNING", "weak-hash", "weak hash"),
-        _result(root, "b.py", 9, "ERROR", "sql-injection", "SQLi from user input"),
-    ]}
+    data = {
+        "results": [
+            _result(root, "a.py", 5, "WARNING", "weak-hash", "weak hash"),
+            _result(root, "b.py", 9, "ERROR", "sql-injection", "SQLi from user input"),
+        ]
+    }
     out = _format(data, "auto")
     assert "2 finding(s) from opengrep (auto):" in out
     # ERROR must be listed before WARNING
@@ -61,8 +63,13 @@ def test_opengrep_scan_reports_missing_binary(runtime, monkeypatch):
 
 def test_opengrep_scan_reports_internal_error_honestly(runtime, monkeypatch):
     # exit 2 with no stdout == fatal internal error (e.g. OOM), NOT "no findings".
-    monkeypatch.setattr(og, "run_cli", lambda *a, **k: CliResult(
-        stdout="", stderr="Fatal: out of memory", returncode=2))
+    monkeypatch.setattr(
+        og,
+        "run_cli",
+        lambda *a, **k: CliResult(
+            stdout="", stderr="Fatal: out of memory", returncode=2
+        ),
+    )
     out = opengrep_scan.invoke({"path": "."})
     assert "exit 2" in out
     assert "out of memory" in out

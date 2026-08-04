@@ -26,7 +26,7 @@ ToolFactory = Callable[[], list]
 @dataclass
 class AgentSpec:
     name: str
-    description: str          # one line — shown to the orchestrator for routing
+    description: str  # one line — shown to the orchestrator for routing
     system_prompt: str
     tool_factory: ToolFactory = field(default=lambda: [])
     tags: list[str] = field(default_factory=list)
@@ -164,8 +164,8 @@ class Agent:
         self._run_id = uuid.uuid4().hex[:12]
         self._error = ""
         set_active_agent(self.spec.name)
-        begin_findings()      # capture structured findings emitted via report_finding
-        begin_tool_ledger()   # track which tools actually executed (live-test gate)
+        begin_findings()  # capture structured findings emitted via report_finding
+        begin_tool_ledger()  # track which tools actually executed (live-test gate)
         graph = create_agent(
             self.llm,
             self.tools,
@@ -204,12 +204,16 @@ class Agent:
             # files itself and feed them back instead of a generic nudge.
             injected = file_assist.maybe_satisfy_file_request(self.tools, answer)
             if injected:
-                print(f"  {GREY}… reading files it asked for instead of "
-                      f"waiting on you{RESET}")
+                print(
+                    f"  {GREY}… reading files it asked for instead of "
+                    f"waiting on you{RESET}"
+                )
                 answer = self._best(self._drive(graph, injected, cfg), answer)
             else:
-                print(f"  {GREY}… report incomplete (missing: "
-                      f"{', '.join(missing)}); continuing{RESET}")
+                print(
+                    f"  {GREY}… report incomplete (missing: "
+                    f"{', '.join(missing)}); continuing{RESET}"
+                )
                 cont = (
                     "Your report is INCOMPLETE — it is missing these required "
                     f"sections: {', '.join(missing)}. Continue using your tools "
@@ -260,7 +264,7 @@ class Agent:
         self._note(f"{self.spec.name}: step budget spent — writing up what it has")
         wrap_cfg = {**cfg, "recursion_limit": self._FINALIZE_STEPS}
         answer = self._best(self._drive(graph, self._FINALIZE_PROMPT, wrap_cfg), answer)
-        self._budget_exhausted = False   # the wrap-up turn may exhaust its own
+        self._budget_exhausted = False  # the wrap-up turn may exhaust its own
         return answer
 
     def _best(self, candidate: str, current: str) -> str:
@@ -292,18 +296,20 @@ class Agent:
         from .runtime import ran_tools
 
         used = sorted({name for name, _ in ran_tools()})
-        return "\n".join([
-            f"## {self.spec.name}: incomplete run",
-            "",
-            f"**Task:** {task}",
-            "",
-            f"The model exhausted its step budget (`max_steps: {self.config.max_steps}`) "
-            "without producing a report.",
-            f"Tools that did run: {', '.join(used) if used else 'none'}.",
-            "",
-            "Any validated findings from this run are listed below. For a full "
-            "report, narrow the task, raise `max_steps`, or use a stronger model.",
-        ])
+        return "\n".join(
+            [
+                f"## {self.spec.name}: incomplete run",
+                "",
+                f"**Task:** {task}",
+                "",
+                f"The model exhausted its step budget (`max_steps: {self.config.max_steps}`) "
+                "without producing a report.",
+                f"Tools that did run: {', '.join(used) if used else 'none'}.",
+                "",
+                "Any validated findings from this run are listed below. For a full "
+                "report, narrow the task, raise `max_steps`, or use a stronger model.",
+            ]
+        )
 
     # -------------------------------------------------- structured findings
     def _append_structured_findings(self, answer: str) -> str:
@@ -323,9 +329,12 @@ class Agent:
         n_unconf = sum(1 for f in findings if f.status == "unconfirmed")
         n_grounded = len(findings) - n_unconf
         parts = [
-            "", "---", "## Structured Findings (validated)",
+            "",
+            "---",
+            "## Structured Findings (validated)",
             f"_{len(findings)} finding(s): {n_grounded} grounded, {n_unconf} "
-            "unconfirmed. Evidence checked against the workspace._", "",
+            "unconfirmed. Evidence checked against the workspace._",
+            "",
         ]
         for f in findings:
             parts.append(f.to_markdown())
@@ -423,8 +432,10 @@ class Agent:
             self._budget_exhausted = True
             if spinner:
                 spinner.stop()
-            print(f"  {GREY}{tag}… step budget "
-                  f"({cfg.get('recursion_limit')}) spent{RESET}")
+            print(
+                f"  {GREY}{tag}… step budget "
+                f"({cfg.get('recursion_limit')}) spent{RESET}"
+            )
         except Exception as e:
             # Provider-side failure (auth, rate limit, context overflow). Held,
             # not raised: run() re-raises it only if the run produced nothing,

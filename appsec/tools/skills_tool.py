@@ -27,8 +27,7 @@ def load_skill(name: str) -> str:
     if not available:
         return f"You have no curated skills to load (agent '{agent}')."
     return (
-        f"No skill named '{name}' for {agent}. Available: "
-        f"{', '.join(available)}."
+        f"No skill named '{name}' for {agent}. Available: " f"{', '.join(available)}."
     )
 
 

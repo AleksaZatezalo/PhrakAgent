@@ -37,7 +37,7 @@ def prompt_char_budget(cfg: LLMConfig) -> int:
     the window is budgeted so the system prompt and the answer still fit.
     """
     if cfg.provider.lower() == "anthropic":
-        return 240_000        # ~70k tokens — well inside every current Claude window
+        return 240_000  # ~70k tokens — well inside every current Claude window
     return max(4_000, int(cfg.num_ctx * 3.5 * 0.5))
 
 
@@ -93,14 +93,18 @@ def _warn_if_ollama_unready(cfg: LLMConfig) -> None:
         ) as resp:
             names = {m.get("name", "") for m in json.load(resp).get("models", [])}
     except Exception:
-        print(f"  {GREY}… no Ollama server at {cfg.base_url} — start it with "
-              f"`ollama serve`{RESET}")
+        print(
+            f"  {GREY}… no Ollama server at {cfg.base_url} — start it with "
+            f"`ollama serve`{RESET}"
+        )
         return
     # Ollama resolves a bare name to its ":latest" tag; match how it does.
     wanted = cfg.model if ":" in cfg.model else f"{cfg.model}:latest"
     if names and wanted not in names:
-        print(f"  {GREY}… model '{cfg.model}' is not pulled — run "
-              f"`ollama pull {cfg.model}`{RESET}")
+        print(
+            f"  {GREY}… model '{cfg.model}' is not pulled — run "
+            f"`ollama pull {cfg.model}`{RESET}"
+        )
 
 
 def build_chat_model(cfg: LLMConfig) -> BaseChatModel:
@@ -126,7 +130,7 @@ def build_chat_model(cfg: LLMConfig) -> BaseChatModel:
             # trips its own "too large for a non-streaming request" guard.
             "max_tokens": cfg.max_tokens,
         }
-        if cfg.base_url:                 # else the SDK's own endpoint
+        if cfg.base_url:  # else the SDK's own endpoint
             kwargs["base_url"] = cfg.base_url
         if _accepts_temperature(cfg.model):
             kwargs["temperature"] = cfg.temperature

@@ -57,7 +57,7 @@ class Task:
     task: str
     depends_on: list[str] = field(default_factory=list)
     parallel_group: str = ""
-    status: str = "pending"          # pending | running | done | failed | skipped
+    status: str = "pending"  # pending | running | done | failed | skipped
     artifact: str = ""
     error: str = ""
 
@@ -123,13 +123,16 @@ Reply with ONLY the agent name (one word from the list). No explanation.
 REQUEST: {request}
 """
 
+
 def _clip(text: str, limit: int) -> str:
     """Trim to ``limit`` chars and say so — silent truncation reads as absence."""
     text = text or ""
     if len(text) <= limit:
         return text
-    return (text[:limit].rstrip() +
-            f"\n\n[... truncated: {len(text) - limit} more characters]")
+    return (
+        text[:limit].rstrip()
+        + f"\n\n[... truncated: {len(text) - limit} more characters]"
+    )
 
 
 def _merge_outputs(sections: list[tuple[str, str]], budget: int) -> str:
@@ -252,9 +255,7 @@ class Orchestrator:
     def route(self, request: str) -> str:
         """Pick the single most appropriate agent for a request."""
         names = self.registry.names()
-        prompt = _ROUTER_PROMPT.format(
-            catalog=self.registry.catalog(), request=request
-        )
+        prompt = _ROUTER_PROMPT.format(catalog=self.registry.catalog(), request=request)
         try:
             text = message_text(self.llm.invoke(prompt)).strip()
         except Exception:
@@ -285,8 +286,9 @@ class Orchestrator:
         self, name: str, task: str, context: str = "", quiet: bool = False
     ) -> str:
         spec = self.registry.get(name)
-        agent = Agent(spec, self._model_for(name), self.skills, self.config,
-                      quiet=quiet)
+        agent = Agent(
+            spec, self._model_for(name), self.skills, self.config, quiet=quiet
+        )
         return agent.run(task, extra_context=context)
 
     def save_agent_report(self, name: str, task: str, output: str) -> str:
@@ -301,14 +303,18 @@ class Orchestrator:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         path = self.config.reports_dir() / f"report-{ts}-{name}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("\n".join([
-            f"# {name} Report — {ts}",
-            f"\n**Agent:** {name}",
-            f"\n**Task:** {task}\n",
-            "## Output\n",
-            output,
-            "",
-        ]))
+        path.write_text(
+            "\n".join(
+                [
+                    f"# {name} Report — {ts}",
+                    f"\n**Agent:** {name}",
+                    f"\n**Task:** {task}\n",
+                    "## Output\n",
+                    output,
+                    "",
+                ]
+            )
+        )
         self._prune_reports()
         return str(path)
 
@@ -335,10 +341,15 @@ class Orchestrator:
                     continue
                 seen_ids.add(tid)
                 deps = [str(d) for d in (item.get("depends_on") or [])]
-                tasks.append(Task(
-                    id=tid, agent=agent, task=item.get("task", request),
-                    depends_on=deps, parallel_group=str(item.get("parallel_group") or ""),
-                ))
+                tasks.append(
+                    Task(
+                        id=tid,
+                        agent=agent,
+                        task=item.get("task", request),
+                        depends_on=deps,
+                        parallel_group=str(item.get("parallel_group") or ""),
+                    )
+                )
             # drop dangling dependencies the model may have invented
             valid = {t.id for t in tasks}
             for t in tasks:
@@ -347,8 +358,14 @@ class Orchestrator:
             prev = ""
             for i, step in enumerate(self.plan(request), 1):
                 tid = f"t{i}"
-                tasks.append(Task(id=tid, agent=step.agent, task=step.task,
-                                  depends_on=[prev] if prev else []))
+                tasks.append(
+                    Task(
+                        id=tid,
+                        agent=step.agent,
+                        task=step.task,
+                        depends_on=[prev] if prev else [],
+                    )
+                )
                 prev = tid
         return tasks
 
@@ -376,8 +393,9 @@ class Orchestrator:
             if on_step:
                 on_step(i, step)
             # the last few agents' findings, budgeted for the reader's model
-            ctx = _merge_outputs(context_parts[-3:],
-                                 prompt_char_budget(self.config.llm_for(step.agent)))
+            ctx = _merge_outputs(
+                context_parts[-3:], prompt_char_budget(self.config.llm_for(step.agent))
+            )
             result = self.run_agent(step.agent, step.task, context=ctx)
             outputs.append({"agent": step.agent, "task": step.task, "output": result})
             context_parts.append((step.agent, result))
@@ -423,10 +441,12 @@ class Orchestrator:
 
         tasks = plan or self.plan_dag(request)
         by_id = {t.id: t for t in tasks}
-        max_workers = max(1, getattr(
-            getattr(self.config, "orchestrator", None), "max_concurrency", 3))
+        max_workers = max(
+            1, getattr(getattr(self.config, "orchestrator", None), "max_concurrency", 3)
+        )
         continue_on_failure = getattr(
-            getattr(self.config, "orchestrator", None), "continue_on_failure", True)
+            getattr(self.config, "orchestrator", None), "continue_on_failure", True
+        )
 
         lock = threading.Lock()
         step_counter = {"n": 0}
@@ -435,12 +455,14 @@ class Orchestrator:
             return all(by_id[d].status == "done" for d in t.depends_on if d in by_id)
 
         def deps_failed(t: Task) -> bool:
-            return any(by_id[d].status in ("failed", "skipped")
-                       for d in t.depends_on if d in by_id)
+            return any(
+                by_id[d].status in ("failed", "skipped")
+                for d in t.depends_on
+                if d in by_id
+            )
 
         def context_for(t: Task) -> str:
-            deps = [by_id[d] for d in t.depends_on
-                    if d in by_id and by_id[d].artifact]
+            deps = [by_id[d] for d in t.depends_on if d in by_id and by_id[d].artifact]
             if not deps:
                 return ""
             # Budgeted against the *consumer's* model: a task told to trace its
@@ -473,8 +495,11 @@ class Orchestrator:
         with cf.ThreadPoolExecutor(max_workers=max_workers) as pool:
             pending = {t.id for t in tasks}
             while pending:
-                ready = [by_id[i] for i in list(pending)
-                         if by_id[i].status == "pending" and deps_done(by_id[i])]
+                ready = [
+                    by_id[i]
+                    for i in list(pending)
+                    if by_id[i].status == "pending" and deps_done(by_id[i])
+                ]
                 # tasks whose deps failed can never run — skip them (isolation)
                 for i in list(pending):
                     t = by_id[i]
@@ -492,8 +517,9 @@ class Orchestrator:
                         break
                     # nothing ready but tasks remain and none can run -> break the
                     # deadlock (e.g. a dependency cycle) by skipping the rest.
-                    if all(by_id[i].status == "pending" for i in pending) and \
-                            not any(deps_done(by_id[i]) for i in pending):
+                    if all(by_id[i].status == "pending" for i in pending) and not any(
+                        deps_done(by_id[i]) for i in pending
+                    ):
                         for i in list(pending):
                             by_id[i].status = "skipped"
                             by_id[i].artifact = "[skipped: unsatisfiable dependency]"
@@ -506,8 +532,16 @@ class Orchestrator:
                 for fut in cf.as_completed(futures):
                     fut.result()  # execute() never raises; this just joins
 
-        outputs = [{"agent": t.agent, "task": t.task, "output": t.artifact,
-                    "status": t.status, "id": t.id} for t in tasks]
+        outputs = [
+            {
+                "agent": t.agent,
+                "task": t.task,
+                "output": t.artifact,
+                "status": t.status,
+                "id": t.id,
+            }
+            for t in tasks
+        ]
         report = self._synthesize_dag(request, tasks)
         report_path = self._save_report(request, tasks, outputs, report)
         return {
@@ -526,9 +560,12 @@ class Orchestrator:
             # when nothing worked, so leaving the reason out (it was only in the
             # saved report's raw-output section) hides exactly what they need.
             return "\n".join(
-                ["No task completed successfully."] +
-                [f"- {t.id} [{t.agent}] {t.status}"
-                 + (f": {t.error}" if t.error else "") for t in tasks]
+                ["No task completed successfully."]
+                + [
+                    f"- {t.id} [{t.agent}] {t.status}"
+                    + (f": {t.error}" if t.error else "")
+                    for t in tasks
+                ]
             )
         if len(done) == 1 and len(tasks) == 1:
             return done[0].artifact

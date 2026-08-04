@@ -22,15 +22,16 @@ class ScopePolicy:
     """An allow-list narrowing what network tools may reach, within loopback."""
 
     enabled: bool = False
-    allowed_hosts: list[str] = field(default_factory=list)   # empty = any loopback
-    allowed_ports: list[int] = field(default_factory=list)   # empty = any port
-    allowed_paths: list[str] = field(default_factory=list)   # path prefixes; empty=any
+    allowed_hosts: list[str] = field(default_factory=list)  # empty = any loopback
+    allowed_ports: list[int] = field(default_factory=list)  # empty = any port
+    allowed_paths: list[str] = field(default_factory=list)  # path prefixes; empty=any
     denied_paths: list[str] = field(default_factory=list)
-    rate_limit_per_min: int = 0                              # 0 = unlimited
+    rate_limit_per_min: int = 0  # 0 = unlimited
 
     @classmethod
     def from_dict(cls, raw: dict) -> "ScopePolicy":
         raw = raw or {}
+
         def _ints(v):
             out = []
             for x in v or []:
@@ -39,6 +40,7 @@ class ScopePolicy:
                 except (TypeError, ValueError):
                     continue
             return out
+
         return cls(
             enabled=bool(raw.get("enabled", True)),  # a present file is on by default
             allowed_hosts=[str(h).lower() for h in raw.get("allowed_hosts") or []],
@@ -66,14 +68,18 @@ class ScopePolicy:
         u = urlparse(url)
         host = (u.hostname or "").lower()
         if self.allowed_hosts and host not in self.allowed_hosts:
-            return (f"[OUT OF SCOPE] host '{host}' is not in the scope policy's "
-                    f"allowed_hosts ({', '.join(self.allowed_hosts)}). "
-                    f"Edit {SCOPE_FILENAME} to widen scope.")
+            return (
+                f"[OUT OF SCOPE] host '{host}' is not in the scope policy's "
+                f"allowed_hosts ({', '.join(self.allowed_hosts)}). "
+                f"Edit {SCOPE_FILENAME} to widen scope."
+            )
         if self.allowed_ports:
             port = u.port or (443 if u.scheme == "https" else 80)
             if port not in self.allowed_ports:
-                return (f"[OUT OF SCOPE] port {port} is not in the scope policy's "
-                        f"allowed_ports ({self.allowed_ports}).")
+                return (
+                    f"[OUT OF SCOPE] port {port} is not in the scope policy's "
+                    f"allowed_ports ({self.allowed_ports})."
+                )
         return None
 
     def check_url(self, url: str) -> str | None:
@@ -92,9 +98,13 @@ class ScopePolicy:
         for d in self.denied_paths:
             if path.startswith(d):
                 return f"[OUT OF SCOPE] path '{path}' matches a denied prefix '{d}'."
-        if self.allowed_paths and not any(path.startswith(p) for p in self.allowed_paths):
-            return (f"[OUT OF SCOPE] path '{path}' is not under any allowed prefix "
-                    f"({', '.join(self.allowed_paths)}).")
+        if self.allowed_paths and not any(
+            path.startswith(p) for p in self.allowed_paths
+        ):
+            return (
+                f"[OUT OF SCOPE] path '{path}' is not under any allowed prefix "
+                f"({', '.join(self.allowed_paths)})."
+            )
         return None
 
 
@@ -134,8 +144,10 @@ def check_rate_limit(policy: ScopePolicy, now: float | None = None) -> str | Non
     while _REQUEST_TIMES and now - _REQUEST_TIMES[0] > 60.0:
         _REQUEST_TIMES.popleft()
     if len(_REQUEST_TIMES) >= policy.rate_limit_per_min:
-        return (f"[RATE LIMITED] scope policy allows {policy.rate_limit_per_min} "
-                "request(s)/min to the target; slow down and retry shortly.")
+        return (
+            f"[RATE LIMITED] scope policy allows {policy.rate_limit_per_min} "
+            "request(s)/min to the target; slow down and retry shortly."
+        )
     _REQUEST_TIMES.append(now)
     return None
 

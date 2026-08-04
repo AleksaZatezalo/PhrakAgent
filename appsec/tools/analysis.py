@@ -11,17 +11,33 @@ from langchain_core.tools import tool
 from .common import ANALYSIS_MAX, workspace
 
 _DEP_FILES = [
-    "requirements.txt", "requirements.in", "pyproject.toml", "Pipfile",
-    "package.json", "yarn.lock", "go.mod", "Cargo.toml", "pom.xml",
-    "build.gradle", "Gemfile", "composer.json",
+    "requirements.txt",
+    "requirements.in",
+    "pyproject.toml",
+    "Pipfile",
+    "package.json",
+    "yarn.lock",
+    "go.mod",
+    "Cargo.toml",
+    "pom.xml",
+    "build.gradle",
+    "Gemfile",
+    "composer.json",
 ]
 
 _FINGERPRINTS = {
-    "Flask": ["flask"], "Django": ["django"], "FastAPI": ["fastapi"],
-    "Express": ["express"], "React": ["react"], "Vue": ["vue"],
-    "Spring": ["spring-boot", "springframework"], "Rails": ["rails"],
-    "Laravel": ["laravel/framework"], "Go net/http": ["net/http"],
-    "Docker": ["FROM "], "Kubernetes": ["apiVersion:"],
+    "Flask": ["flask"],
+    "Django": ["django"],
+    "FastAPI": ["fastapi"],
+    "Express": ["express"],
+    "React": ["react"],
+    "Vue": ["vue"],
+    "Spring": ["spring-boot", "springframework"],
+    "Rails": ["rails"],
+    "Laravel": ["laravel/framework"],
+    "Go net/http": ["net/http"],
+    "Docker": ["FROM "],
+    "Kubernetes": ["apiVersion:"],
 }
 
 
@@ -40,7 +56,11 @@ def analyze_dependencies(path: str = ".") -> str:
             except Exception:
                 continue
             found.append(f"### {f.relative_to(root)}\n{content}")
-    return ("\n\n".join(found))[:ANALYSIS_MAX] if found else "No dependency manifests found."
+    return (
+        ("\n\n".join(found))[:ANALYSIS_MAX]
+        if found
+        else "No dependency manifests found."
+    )
 
 
 @tool
@@ -48,8 +68,11 @@ def fingerprint_stack(path: str = ".") -> str:
     """Identify frameworks/technologies used by the project from manifests and
     config files, to guide which threats/vuln classes matter."""
     deps = analyze_dependencies.invoke({"path": path}).lower()
-    found = [name for name, markers in _FINGERPRINTS.items()
-             if any(m.lower() in deps for m in markers)]
+    found = [
+        name
+        for name, markers in _FINGERPRINTS.items()
+        if any(m.lower() in deps for m in markers)
+    ]
     root = (workspace() / path).resolve()
     if (root / "Dockerfile").exists() or list(root.rglob("Dockerfile")):
         found.append("Docker")

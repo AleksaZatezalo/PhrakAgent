@@ -17,9 +17,9 @@ from urllib.parse import urlparse
 from ..runtime import require_config
 
 # Output caps (bytes/chars) — named by purpose rather than repeated magic numbers.
-FILE_READ_MAX = 60_000      # a single file read
-ANALYSIS_MAX = 40_000       # static-analysis / search output
-CLI_OUTPUT_MAX = 6_000      # dynamic-tool (scanner) output
+FILE_READ_MAX = 60_000  # a single file read
+ANALYSIS_MAX = 40_000  # static-analysis / search output
+CLI_OUTPUT_MAX = 6_000  # dynamic-tool (scanner) output
 
 # Bare hostnames accepted without DNS resolution. Everything else that is not an
 # IP literal is resolved and every returned address must be loopback.
@@ -124,7 +124,10 @@ def run_cli(
     log_syscall(" ".join(cmd))
     try:
         proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
             cwd=str(cwd) if cwd else None,
         )
     except subprocess.TimeoutExpired:
@@ -243,8 +246,7 @@ def _enforce_scope(url: str, host_port_only: bool = False) -> str | None:
         from ..runtime import require_config
 
         policy = load_policy(require_config())
-        err = (policy.check_host_port(url) if host_port_only
-               else policy.check_url(url))
+        err = policy.check_host_port(url) if host_port_only else policy.check_url(url)
         if err:
             return err
         return None if host_port_only else check_rate_limit(policy)

@@ -121,7 +121,9 @@ def log_syscall_note(summary: str) -> None:
 
 # reasoning models (e.g. deepseek-r1) wrap chain-of-thought in these tags;
 # strip them so only the finished answer reaches the user.
-_THINK = re.compile(r"<(think|thought|reasoning|scratchpad)>.*?</\1>", re.DOTALL | re.IGNORECASE)
+_THINK = re.compile(
+    r"<(think|thought|reasoning|scratchpad)>.*?</\1>", re.DOTALL | re.IGNORECASE
+)
 
 # Smaller local tool-callers (qwen2.5-coder, llama3.x, …) sometimes write the
 # harness's own tool protocol into their *prose* instead of emitting a structured
@@ -129,8 +131,13 @@ _THINK = re.compile(r"<(think|thought|reasoning|scratchpad)>.*?</\1>", re.DOTALL
 # real failure mode, not a hypothetical. Claude doesn't do this, but the markup is
 # worthless in a report either way, so it is stripped for every provider.
 _PROTOCOL_TAGS = (
-    "tool_response", "tool_call", "tool_result", "tool_use", "tool_outputs",
-    "function_call", "function_results",
+    "tool_response",
+    "tool_call",
+    "tool_result",
+    "tool_use",
+    "tool_outputs",
+    "function_call",
+    "function_results",
 )
 _PROTOCOL_BLOCK = re.compile(
     r"<(" + "|".join(_PROTOCOL_TAGS) + r")>.*?</\1>", re.DOTALL | re.IGNORECASE
@@ -189,7 +196,9 @@ def styled_question(agent: str, question: str) -> str:
     """Ask the user a question on behalf of a sub-agent; return their answer."""
     pause_active_spinner()
     print()
-    print(f"  {MAGENTA}╭─ ◆ {BOLD}{agent}{RESET}{MAGENTA} needs your input {'─' * 20}╮{RESET}")
+    print(
+        f"  {MAGENTA}╭─ ◆ {BOLD}{agent}{RESET}{MAGENTA} needs your input {'─' * 20}╮{RESET}"
+    )
     for line in _wrap(question):
         print(f"  {MAGENTA}│{RESET} {line}")
     print(f"  {MAGENTA}╰{'─' * 56}╯{RESET}")
@@ -204,7 +213,9 @@ def styled_permission(agent: str, action: str, detail: str = "") -> str:
     """Request permission on behalf of a sub-agent; return GRANTED/DENIED."""
     pause_active_spinner()
     print()
-    print(f"  {YELLOW}╭─ ⚠ {BOLD}{agent}{RESET}{YELLOW} requests permission {'─' * 17}╮{RESET}")
+    print(
+        f"  {YELLOW}╭─ ⚠ {BOLD}{agent}{RESET}{YELLOW} requests permission {'─' * 17}╮{RESET}"
+    )
     print(f"  {YELLOW}│{RESET} action: {action}")
     for line in _wrap(detail):
         if line:

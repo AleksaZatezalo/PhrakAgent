@@ -13,10 +13,22 @@ from tests.conftest import FakeLLM
 
 def _registry():
     reg = AgentRegistry()
-    reg.register(AgentSpec("code_review", "reviews source code for vulnerabilities",
-                           "p", tags=["sast", "code"]))
-    reg.register(AgentSpec("threat_model", "builds a STRIDE threat model",
-                           "p", tags=["stride", "design"]))
+    reg.register(
+        AgentSpec(
+            "code_review",
+            "reviews source code for vulnerabilities",
+            "p",
+            tags=["sast", "code"],
+        )
+    )
+    reg.register(
+        AgentSpec(
+            "threat_model",
+            "builds a STRIDE threat model",
+            "p",
+            tags=["stride", "design"],
+        )
+    )
     return reg
 
 
@@ -64,8 +76,8 @@ def test_save_agent_report_writes_output_and_task(config):
     assert p.parent == config.reports_dir()
     assert p.name.startswith("report-") and p.name.endswith("-code_review.md")
     body = p.read_text()
-    assert "review ./target" in body                       # the task is recorded
-    assert "SQL injection at vuln_app.py:11" in body       # ...and the output
+    assert "review ./target" in body  # the task is recorded
+    assert "SQL injection at vuln_app.py:11" in body  # ...and the output
 
 
 def test_save_agent_report_is_pruned_by_keep_reports(config):
@@ -75,7 +87,9 @@ def test_save_agent_report_is_pruned_by_keep_reports(config):
     orch = _orch(FakeLLM(reply=""), config)
     for i in range(4):
         # distinct names within the same second -> exercise pruning deterministically
-        (config.reports_dir() / f"report-2026073{i}-000000-code_review.md").write_text("x")
+        (config.reports_dir() / f"report-2026073{i}-000000-code_review.md").write_text(
+            "x"
+        )
     orch.save_agent_report("threat_model", "model it", "out")
     assert len(list(config.reports_dir().glob("report-*.md"))) == 2
 

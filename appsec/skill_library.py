@@ -49,9 +49,7 @@ def for_agent(agent: str) -> list[Skill]:
     d = SKILLS_ROOT / agent
     if not d.is_dir():
         return []
-    return sorted(
-        (_parse(p) for p in d.glob("*.md")), key=lambda s: s.name
-    )
+    return sorted((_parse(p) for p in d.glob("*.md")), key=lambda s: s.name)
 
 
 def index(agent: str) -> str:
@@ -61,7 +59,7 @@ def index(agent: str) -> str:
         return ""
     lines = [f"- {s.name} — {s.when_to_use}" for s in skills]
     return (
-        "## Your skills (call load_skill(\"<name>\") to read the full "
+        '## Your skills (call load_skill("<name>") to read the full '
         "procedure before you do that part of the work)\n" + "\n".join(lines)
     )
 

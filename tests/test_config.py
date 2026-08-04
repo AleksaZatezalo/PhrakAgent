@@ -43,7 +43,7 @@ def test_to_dict_round_trip_preserves_settings():
 
 def test_llm_for_applies_override():
     cfg = Config.from_dict({"agent_models": {"code_review": {"temperature": 0.9}}})
-    base = cfg.llm_for("threat_model")       # no override -> base config
+    base = cfg.llm_for("threat_model")  # no override -> base config
     overridden = cfg.llm_for("code_review")
     assert base.temperature == cfg.llm.temperature
     assert overridden.temperature == 0.9

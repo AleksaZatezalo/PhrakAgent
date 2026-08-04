@@ -44,11 +44,13 @@ def agent(config, monkeypatch):
     """An Agent wired to a FakeGraph the test fills in via ``agent.graph``."""
     import langchain.agents
 
-    spec = AgentSpec("tester", "test agent", "be a test agent",
-                     report_sections=SECTIONS)
+    spec = AgentSpec(
+        "tester", "test agent", "be a test agent", report_sections=SECTIONS
+    )
     a = Agent(spec, FakeLLM(reply="unused"), SkillStore(config), config, quiet=True)
-    monkeypatch.setattr(langchain.agents, "create_agent",
-                        lambda *args, **kwargs: a.graph)
+    monkeypatch.setattr(
+        langchain.agents, "create_agent", lambda *args, **kwargs: a.graph
+    )
     return a
 
 
@@ -67,10 +69,12 @@ def test_strip_thoughts_drops_leaked_tool_protocol():
 # --------------------------------------------------------- exhausted budget
 def test_exhausted_budget_gets_a_wrap_up_turn(agent):
     """Out of steps mid-turn -> one tool-free turn to write up what it has."""
-    agent.graph = FakeGraph([
-        ("raise", GraphRecursionError("Recursion limit of 40 reached")),
-        ("text", _report()),
-    ])
+    agent.graph = FakeGraph(
+        [
+            ("raise", GraphRecursionError("Recursion limit of 40 reached")),
+            ("text", _report()),
+        ]
+    )
     out = agent.run("review the app")
 
     assert "findings here" in out
@@ -94,7 +98,7 @@ def test_no_usable_output_falls_back_to_a_report(agent):
     out = agent.run("review the app")
 
     assert "incomplete run" in out
-    assert "max_steps" in out            # tells the user which knob to turn
+    assert "max_steps" in out  # tells the user which knob to turn
     assert "tool_response" not in out
 
 
@@ -109,10 +113,12 @@ def test_provider_error_with_no_output_is_raised(agent):
 
 def test_provider_error_after_a_good_report_keeps_the_report(agent):
     """A late failure can't discard work that's already written."""
-    agent.graph = FakeGraph([
-        ("text", _report()),
-        ("raise", RuntimeError("429 rate limited")),
-    ])
+    agent.graph = FakeGraph(
+        [
+            ("text", _report()),
+            ("raise", RuntimeError("429 rate limited")),
+        ]
+    )
     # incomplete on purpose so a second round runs and fails
     agent.spec.report_sections = SECTIONS + ["remediation"]
     out = agent.run("review the app")
@@ -122,22 +128,26 @@ def test_provider_error_after_a_good_report_keeps_the_report(agent):
 
 # --------------------------------------------------------- best-answer choice
 def test_a_later_junk_turn_does_not_replace_a_good_draft(agent):
-    agent.spec.report_sections = SECTIONS + ["remediation"]   # never satisfied
-    agent.graph = FakeGraph([
-        ("text", _report()),
-        ("text", "<tool_response></tool_response>"),
-        ("text", "ok"),
-    ])
+    agent.spec.report_sections = SECTIONS + ["remediation"]  # never satisfied
+    agent.graph = FakeGraph(
+        [
+            ("text", _report()),
+            ("text", "<tool_response></tool_response>"),
+            ("text", "ok"),
+        ]
+    )
     out = agent.run("review the app")
 
     assert "findings here" in out
 
 
 def test_a_more_complete_turn_wins(agent):
-    agent.graph = FakeGraph([
-        ("text", "## Summary\npartial only"),
-        ("text", _report("\n\n## Remediation\nfix it")),
-    ])
+    agent.graph = FakeGraph(
+        [
+            ("text", "## Summary\npartial only"),
+            ("text", _report("\n\n## Remediation\nfix it")),
+        ]
+    )
     out = agent.run("review the app")
 
     assert "fix it" in out
@@ -148,10 +158,20 @@ def test_all_failed_synthesis_names_the_errors(config):
     """The terminal message is where the user looks; it must carry the reason."""
     orch = Orchestrator(FakeLLM(reply="unused"), skills=None, config=config)
     tasks = [
-        Task(id="t1", agent="code_review", task="review",
-             status="failed", error="Recursion limit of 40 reached"),
-        Task(id="t2", agent="test_case", task="tests",
-             depends_on=["t1"], status="skipped"),
+        Task(
+            id="t1",
+            agent="code_review",
+            task="review",
+            status="failed",
+            error="Recursion limit of 40 reached",
+        ),
+        Task(
+            id="t2",
+            agent="test_case",
+            task="tests",
+            depends_on=["t1"],
+            status="skipped",
+        ),
     ]
     out = orch._synthesize_dag("assess", tasks)
 
@@ -170,22 +190,22 @@ def test_merge_outputs_never_starves_a_later_agent():
     """
     from appsec.orchestrator import _merge_outputs
 
-    merged = _merge_outputs([("code_review", "A" * 23_114),
-                             ("threat_model", "B" * 34_898)], budget=16_000)
+    merged = _merge_outputs(
+        [("code_review", "A" * 23_114), ("threat_model", "B" * 34_898)], budget=16_000
+    )
 
     assert "code_review" in merged and "threat_model" in merged
-    assert "A" in merged and "B" in merged          # both are represented
-    assert "truncated" in merged                    # and it says it clipped
+    assert "A" in merged and "B" in merged  # both are represented
+    assert "truncated" in merged  # and it says it clipped
 
 
 def test_merge_outputs_hands_unused_share_to_longer_sections():
     from appsec.orchestrator import _merge_outputs
 
-    merged = _merge_outputs([("short", "s" * 10), ("long", "L" * 5_000)],
-                            budget=2_000)
+    merged = _merge_outputs([("short", "s" * 10), ("long", "L" * 5_000)], budget=2_000)
 
-    assert "s" * 10 in merged                       # short section kept whole
-    assert merged.count("L") > 1_000                # long one got the remainder
+    assert "s" * 10 in merged  # short section kept whole
+    assert merged.count("L") > 1_000  # long one got the remainder
 
 
 def test_merge_outputs_leaves_small_inputs_untouched():
@@ -202,8 +222,7 @@ def test_prompt_budget_scales_with_the_provider():
     from appsec.llm import prompt_char_budget
 
     local = prompt_char_budget(LLMConfig(provider="ollama", num_ctx=16384))
-    claude = prompt_char_budget(LLMConfig(provider="anthropic",
-                                          model="claude-opus-5"))
+    claude = prompt_char_budget(LLMConfig(provider="anthropic", model="claude-opus-5"))
 
-    assert 16_000 < local < 40_000       # ~half a 16k-token window, in chars
-    assert claude > 200_000              # a full multi-agent run fits
+    assert 16_000 < local < 40_000  # ~half a 16k-token window, in chars
+    assert claude > 200_000  # a full multi-agent run fits

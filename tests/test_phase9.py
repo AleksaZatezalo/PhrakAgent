@@ -34,7 +34,7 @@ def test_skill_workspace_and_global_scope(config, tmp_path, monkeypatch):
     assert set(store.skill_scopes("shared")) == {"workspace", "global"}
 
     assert store.remove_skill("shared", scope="workspace") is True
-    assert "GLOBAL body" in store.read_skill("shared")   # global remains
+    assert "GLOBAL body" in store.read_skill("shared")  # global remains
 
 
 def test_skill_add_rejects_missing_and_empty(config):
@@ -50,15 +50,18 @@ def _app(config):
 
 
 # --------------------------------------------------------------------- clone
-@pytest.mark.parametrize("url,ok", [
-    ("https://github.com/a/b.git", True),
-    ("https://github.com/a/b", True),
-    ("git@github.com:a/b.git", True),
-    ("file:///etc/passwd", False),
-    ("http://x@evil/creds.git", False),
-    ("/local/path", False),
-    ("ftp://x/y", False),
-])
+@pytest.mark.parametrize(
+    "url,ok",
+    [
+        ("https://github.com/a/b.git", True),
+        ("https://github.com/a/b", True),
+        ("git@github.com:a/b.git", True),
+        ("file:///etc/passwd", False),
+        ("http://x@evil/creds.git", False),
+        ("/local/path", False),
+        ("ftp://x/y", False),
+    ],
+)
 def test_valid_git_url(url, ok):
     assert clone.valid_git_url(url) is ok
 
@@ -70,6 +73,7 @@ def _fake_git(create=True):
             target.mkdir(parents=True, exist_ok=True)
             (target / "README.md").write_text("hello")
         return CliResult(stdout="", stderr="", returncode=0)
+
     return _run
 
 
@@ -89,7 +93,7 @@ def test_clone_enforces_size_cap(config, monkeypatch):
     monkeypatch.setattr(clone, "run_cli", _fake_git())
     res = clone.clone_repo(config, "https://github.com/a/big.git", max_mb=0)
     assert not res.ok and "over the" in res.message
-    assert not Path(config.clones_dir() / "big").exists()   # cleaned up
+    assert not Path(config.clones_dir() / "big").exists()  # cleaned up
 
 
 def test_clone_refuses_existing(config, monkeypatch):
@@ -115,8 +119,8 @@ def test_expand_at_refs(config, workspace):
     out = expand_at_refs(text, workspace)
     assert "Referenced files:" in out
     assert "--- vuln_app.py ---" in out
-    assert "SuperSecret123" in out       # file contents inlined
-    assert "outside workspace" in out    # traversal refused
+    assert "SuperSecret123" in out  # file contents inlined
+    assert "outside workspace" in out  # traversal refused
 
 
 def test_expand_at_refs_noop_without_refs(config, workspace):
@@ -136,11 +140,13 @@ def test_tools_grouped_and_detail(config):
 def test_config_roundtrip_new_fields():
     from appsec.config import Config
 
-    cfg = Config.from_dict({
-        "enable_git_clone": True,
-        "orchestrator": {"mode": "linear", "max_concurrency": 5},
-        "analyzers": {"opengrep": False},
-    })
+    cfg = Config.from_dict(
+        {
+            "enable_git_clone": True,
+            "orchestrator": {"mode": "linear", "max_concurrency": 5},
+            "analyzers": {"opengrep": False},
+        }
+    )
     assert cfg.enable_git_clone is True
     assert cfg.orchestrator.mode == "linear" and cfg.orchestrator.max_concurrency == 5
     assert cfg.analyzers.opengrep is False

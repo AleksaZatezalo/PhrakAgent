@@ -61,8 +61,10 @@ def dependency_audit(path: str = ".") -> str:
     skipped with a note). This is deeper than analyze_dependencies, which only dumps
     manifests."""
     if not _analyzer_enabled("dependency_audit"):
-        return ("dependency_audit is disabled in config "
-                "(analyzers.dependency_audit=false).")
+        return (
+            "dependency_audit is disabled in config "
+            "(analyzers.dependency_audit=false)."
+        )
     return _record_and_summarize(DependencyAuditAdapter().run(path))
 
 

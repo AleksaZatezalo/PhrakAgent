@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from appsec.config import Config, PathsConfig, RagConfig  # noqa: E402
 
-SAMPLE_VULN_APP = '''\
+SAMPLE_VULN_APP = """\
 import sqlite3
 from flask import Flask, request
 
@@ -37,7 +37,7 @@ def ping():
     import os
     host = request.args.get("host")
     return os.popen("ping -c 1 " + host).read()   # command injection
-'''
+"""
 
 
 @pytest.fixture

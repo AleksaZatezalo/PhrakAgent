@@ -73,7 +73,7 @@ def set_key(workspace: str | Path, provider: str, key: str) -> Path:
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as fh:
         fh.write(body)
-    os.chmod(p, 0o600)   # re-assert in case the file already existed
+    os.chmod(p, 0o600)  # re-assert in case the file already existed
     return p
 
 

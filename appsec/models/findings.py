@@ -17,25 +17,44 @@ SEVERITIES = ("critical", "high", "medium", "low", "info")
 
 # A finding's lifecycle status.
 STATUSES = (
-    "new", "confirmed", "unconfirmed", "false_positive", "accepted_risk", "fixed",
+    "new",
+    "confirmed",
+    "unconfirmed",
+    "false_positive",
+    "accepted_risk",
+    "fixed",
 )
 
 # How much of a taint path we actually established.
 COMPLETENESS = (
-    "complete", "partial", "approximate", "runtime_confirmed", "invalidated",
+    "complete",
+    "partial",
+    "approximate",
+    "runtime_confirmed",
+    "invalidated",
 )
 
 # The technique that produced a taint result — never overstate precision.
 ANALYSIS_MODES = (
-    "syntactic", "intra_procedural", "inter_procedural",
-    "framework_assisted", "hybrid_static", "runtime_confirmed",
+    "syntactic",
+    "intra_procedural",
+    "inter_procedural",
+    "framework_assisted",
+    "hybrid_static",
+    "runtime_confirmed",
 )
 
 TAINT_NODE_KINDS = ("source", "sink", "propagator", "sanitizer")
 
 EVIDENCE_TYPES = (
-    "source_reference", "taint_step", "sanitizer", "analyzer_hit",
-    "runtime_observation", "config", "test", "note",
+    "source_reference",
+    "taint_step",
+    "sanitizer",
+    "analyzer_hit",
+    "runtime_observation",
+    "config",
+    "test",
+    "note",
 )
 
 # Allowed status transitions. Human triage may move a finding anywhere, but the
@@ -74,7 +93,7 @@ class TaintNode:
     line: int | None = None
     symbol: str | None = None
     expression: str | None = None
-    kind: str = "source"                    # one of TAINT_NODE_KINDS
+    kind: str = "source"  # one of TAINT_NODE_KINDS
 
     def label(self) -> str:
         loc = self.path + (f":{self.line}" if self.line else "")
@@ -89,7 +108,7 @@ class TaintStep:
     path: str = ""
     line: int | None = None
     symbol: str | None = None
-    operation: str = ""                     # e.g. "assignment", "call", "return"
+    operation: str = ""  # e.g. "assignment", "call", "return"
     from_expression: str | None = None
     to_expression: str | None = None
 
@@ -110,15 +129,20 @@ class TaintPathReference:
     sanitizers_encountered: list[TaintNode] = field(default_factory=list)
     sanitizers_bypassed: list[TaintNode] = field(default_factory=list)
     confidence: float = 0.0
-    completeness: str = "partial"           # one of COMPLETENESS
-    analysis_mode: str = "syntactic"        # one of ANALYSIS_MODES
+    completeness: str = "partial"  # one of COMPLETENESS
+    analysis_mode: str = "syntactic"  # one of ANALYSIS_MODES
 
     def compute_id(self) -> str:
-        basis = "|".join([
-            _norm(self.source.path), str(self.source.line or ""),
-            _norm(self.sink.path), str(self.sink.line or ""),
-            _norm(self.source.expression), _norm(self.sink.expression),
-        ])
+        basis = "|".join(
+            [
+                _norm(self.source.path),
+                str(self.source.line or ""),
+                _norm(self.sink.path),
+                str(self.sink.line or ""),
+                _norm(self.source.expression),
+                _norm(self.sink.expression),
+            ]
+        )
         return "TP-" + hashlib.sha256(basis.encode()).hexdigest()[:12]
 
     def ensure_id(self) -> str:
@@ -151,7 +175,9 @@ class TaintPathReference:
             bypassed = {id(x) for x in self.sanitizers_bypassed}
             lines.append("Sanitizers:")
             for s in san:
-                note = " (bypassed / ineffective)" if id(s) in bypassed else " (effective)"
+                note = (
+                    " (bypassed / ineffective)" if id(s) in bypassed else " (effective)"
+                )
                 lines.append(f"- {s.label()}{note}")
         else:
             lines.append("Sanitizers:\n- None observed")
@@ -167,7 +193,7 @@ class FindingEvidence:
     symbol: str | None = None
     snippet: str | None = None
     reason: str = ""
-    evidence_type: str = "source_reference"   # one of EVIDENCE_TYPES
+    evidence_type: str = "source_reference"  # one of EVIDENCE_TYPES
 
     def location(self) -> str:
         if self.start_line and self.end_line and self.end_line != self.start_line:
@@ -207,8 +233,8 @@ class SecurityFinding:
     # agent's original claim. ``status`` remains the agent's asserted status
     # (back-compat); ``effective_status`` folds the tracks together with human
     # precedence.
-    runtime_status: str = ""      # from a live test / runtime correlation
-    human_status: str = ""        # human triage — highest precedence
+    runtime_status: str = ""  # from a live test / runtime correlation
+    human_status: str = ""  # human triage — highest precedence
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -218,15 +244,17 @@ class SecurityFinding:
         src = self.taint_paths[0].source if self.taint_paths else None
         sink = self.taint_paths[0].sink if self.taint_paths else None
         first_ev = self.evidence[0] if self.evidence else None
-        basis = "|".join([
-            _norm(self.category),
-            _norm(src.path) if src else (first_ev.path if first_ev else ""),
-            str((src.line if src else None) or ""),
-            _norm(sink.path) if sink else "",
-            str((sink.line if sink else None) or ""),
-            _norm(self.affected_symbols[0]) if self.affected_symbols else "",
-            _norm(self.title),
-        ])
+        basis = "|".join(
+            [
+                _norm(self.category),
+                _norm(src.path) if src else (first_ev.path if first_ev else ""),
+                str((src.line if src else None) or ""),
+                _norm(sink.path) if sink else "",
+                str((sink.line if sink else None) or ""),
+                _norm(self.affected_symbols[0]) if self.affected_symbols else "",
+                _norm(self.title),
+            ]
+        )
         return hashlib.sha256(basis.encode()).hexdigest()[:16]
 
     def ensure_identity(self) -> "SecurityFinding":
@@ -244,10 +272,22 @@ class SecurityFinding:
 
     def is_dataflow_category(self) -> bool:
         cat = _norm(self.category)
-        return any(k in cat for k in (
-            "injection", "traversal", "ssrf", "deserial", "xss", "command",
-            "sql", "template", "redirect", "ldap", "xpath",
-        ))
+        return any(
+            k in cat
+            for k in (
+                "injection",
+                "traversal",
+                "ssrf",
+                "deserial",
+                "xss",
+                "command",
+                "sql",
+                "template",
+                "redirect",
+                "ldap",
+                "xpath",
+            )
+        )
 
     # -- multi-track status --------------------------------------------------
     @property
@@ -306,9 +346,11 @@ class SecurityFinding:
         eff = self.effective_status()
         if eff != self.status or self.runtime_status or self.human_status:
             tracks = []
-            for label, val in (("agent", self.status),
-                               ("runtime", self.runtime_status),
-                               ("human", self.human_status)):
+            for label, val in (
+                ("agent", self.status),
+                ("runtime", self.runtime_status),
+                ("human", self.human_status),
+            ):
                 if val:
                     tracks.append(f"{label}={val.replace('_', ' ')}")
             out.append(
@@ -333,7 +375,7 @@ class SecurityFinding:
             san = tp.sanitizers_encountered
             out.append("")
             out.append("Sanitizers:")
-            out += ([f"- {s.label()}" for s in san] if san else ["- None observed"])
+            out += [f"- {s.label()}" for s in san] if san else ["- None observed"]
         else:
             out += ["", "Taint path: none analyzed"]
         if self.evidence:
@@ -363,8 +405,12 @@ def _taint_from_dict(raw: dict) -> TaintPathReference:
     allowed = {f.name for f in TaintPathReference.__dataclass_fields__.values()}
     raw = {k: v for k, v in raw.items() if k in allowed}
     return TaintPathReference(
-        source=src, sink=sink, steps=steps,
-        sanitizers_encountered=enc, sanitizers_bypassed=byp, **raw,
+        source=src,
+        sink=sink,
+        steps=steps,
+        sanitizers_encountered=enc,
+        sanitizers_bypassed=byp,
+        **raw,
     )
 
 
@@ -393,8 +439,11 @@ def validate_finding(f: SecurityFinding) -> list[str]:
         if ev.evidence_type not in EVIDENCE_TYPES:
             errs.append(f"evidence[{i}].evidence_type invalid: {ev.evidence_type!r}")
     # A data-flow finding must not be 'confirmed' on LLM say-so alone.
-    if (f.status == "confirmed" and f.is_dataflow_category()
-            and not f.has_supporting_taint_path()):
+    if (
+        f.status == "confirmed"
+        and f.is_dataflow_category()
+        and not f.has_supporting_taint_path()
+    ):
         errs.append(
             "data-flow finding marked 'confirmed' without a complete or "
             "runtime-confirmed taint path"
@@ -410,8 +459,9 @@ def validate_against_workspace(f: SecurityFinding, root) -> list[str]:
     root = Path(root).resolve()
     errs: list[str] = []
 
-    def _check(path: str, start: int | None, end: int | None, snippet: str | None,
-               where: str) -> None:
+    def _check(
+        path: str, start: int | None, end: int | None, snippet: str | None, where: str
+    ) -> None:
         if not path:
             errs.append(f"{where}: empty path")
             return
@@ -432,7 +482,7 @@ def validate_against_workspace(f: SecurityFinding, root) -> list[str]:
             if ln is not None and not (1 <= ln <= n):
                 errs.append(f"{where}: {lbl} {ln} out of range 1..{n} in {path}")
         if snippet and start and 1 <= start <= n:
-            window = "\n".join(lines[max(0, start - 2): min(n, (end or start) + 1)])
+            window = "\n".join(lines[max(0, start - 2) : min(n, (end or start) + 1)])
             if _norm(snippet)[:40] and _norm(snippet)[:40] not in _norm(window):
                 errs.append(f"{where}: snippet does not match source at {path}:{start}")
 
@@ -440,11 +490,17 @@ def validate_against_workspace(f: SecurityFinding, root) -> list[str]:
         _check(ev.path, ev.start_line, ev.end_line, ev.snippet, f"evidence[{i}]")
     for i, tp in enumerate(f.taint_paths):
         if tp.source.path:
-            _check(tp.source.path, tp.source.line, tp.source.line, None,
-                   f"taint_paths[{i}].source")
+            _check(
+                tp.source.path,
+                tp.source.line,
+                tp.source.line,
+                None,
+                f"taint_paths[{i}].source",
+            )
         if tp.sink.path:
-            _check(tp.sink.path, tp.sink.line, tp.sink.line, None,
-                   f"taint_paths[{i}].sink")
+            _check(
+                tp.sink.path, tp.sink.line, tp.sink.line, None, f"taint_paths[{i}].sink"
+            )
     return errs
 
 
@@ -461,7 +517,9 @@ def dedupe_findings(findings: list[SecurityFinding]) -> list[SecurityFinding]:
             continue
         winner = keep if keep.confidence >= f.confidence else f
         other = f if winner is keep else keep
-        winner.evidence = _union(winner.evidence, other.evidence, key=lambda e: e.location())
+        winner.evidence = _union(
+            winner.evidence, other.evidence, key=lambda e: e.location()
+        )
         winner.taint_paths = _union(
             winner.taint_paths, other.taint_paths, key=lambda t: t.ensure_id()
         )

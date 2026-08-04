@@ -73,8 +73,10 @@ def tool_detail(app, name: str) -> str:
         for t in tools:
             if t.name == name:
                 args = ", ".join((getattr(t, "args", None) or {}).keys())
-                return (f"{t.name}({args})\n  agent: {spec.name}\n\n"
-                        f"{(t.description or '').strip()}")
+                return (
+                    f"{t.name}({args})\n  agent: {spec.name}\n\n"
+                    f"{(t.description or '').strip()}"
+                )
     return f"No tool named '{name}'. Try /tools to list them."
 
 
@@ -82,8 +84,12 @@ def copy_to_clipboard(text: str) -> bool:
     """Best-effort clipboard copy via a platform tool; False if none available."""
     if not text:
         return False
-    for cmd in (["pbcopy"], ["wl-copy"], ["xclip", "-selection", "clipboard"],
-                ["xsel", "--clipboard", "--input"]):
+    for cmd in (
+        ["pbcopy"],
+        ["wl-copy"],
+        ["xclip", "-selection", "clipboard"],
+        ["xsel", "--clipboard", "--input"],
+    ):
         if shutil.which(cmd[0]):
             try:
                 subprocess.run(cmd, input=text.encode(), check=True, timeout=5)

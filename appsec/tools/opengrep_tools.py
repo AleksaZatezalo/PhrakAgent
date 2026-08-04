@@ -56,12 +56,18 @@ def _run(path: str, config: str) -> tuple[dict | None, str | None]:
     if not target.exists():
         return None, f"Path not found: {path}"
     cmd = [
-        _opengrep_bin(), "scan",
-        "--config", config,
-        "--json", "--quiet",
-        "--timeout", "60",
-        "--max-memory", str(MAX_MEMORY_MB),
-        "--jobs", str(JOBS),
+        _opengrep_bin(),
+        "scan",
+        "--config",
+        config,
+        "--json",
+        "--quiet",
+        "--timeout",
+        "60",
+        "--max-memory",
+        str(MAX_MEMORY_MB),
+        "--jobs",
+        str(JOBS),
         *_exclude_args(),
         str(target),
     ]
@@ -82,15 +88,23 @@ def _run(path: str, config: str) -> tuple[dict | None, str | None]:
         err = res.stderr.strip()
         return None, (
             f"opengrep failed (exit {res.returncode}): "
-            + (err[:400] if err else "internal error — likely out of memory "
-               "on a large tree; scan a narrower path (e.g. ./target).")
+            + (
+                err[:400]
+                if err
+                else "internal error — likely out of memory "
+                "on a large tree; scan a narrower path (e.g. ./target)."
+            )
         )
     if not res.stdout.strip():
         err = res.stderr.strip()
         return None, (
             "opengrep produced no output"
-            + (f": {err[:400]}" if err else " (ruleset may need network access; "
-               "point --config at a local rules path for offline scans)")
+            + (
+                f": {err[:400]}"
+                if err
+                else " (ruleset may need network access; "
+                "point --config at a local rules path for offline scans)"
+            )
         )
     try:
         return json.loads(res.stdout), None

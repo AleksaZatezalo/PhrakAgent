@@ -154,11 +154,18 @@ def cmd_run(args) -> int:
 
         _land_report(app, result["report_path"], quiet=True)
         plan = [{"agent": s.agent, "task": s.task} for s in result.get("plan", [])]
-        print(json.dumps({
-            "request": request, "plan": plan,
-            "routed_to": result.get("routed_to"),
-            "report": result["report"], "report_path": result["report_path"],
-        }, indent=2))
+        print(
+            json.dumps(
+                {
+                    "request": request,
+                    "plan": plan,
+                    "routed_to": result.get("routed_to"),
+                    "report": result["report"],
+                    "report_path": result["report_path"],
+                },
+                indent=2,
+            )
+        )
         return 0
     if quiet:
         _land_report(app, result["report_path"], quiet=True)
@@ -190,9 +197,7 @@ def _do_ask(app, question: str, reindex: bool = False, k=None) -> None:
     if reindex:
         phrak_print("reindexing workspace ...")
         stats = app.rag.reindex()
-        phrak_print(
-            f"indexed {stats['chunks']} chunks from {stats['added']} files"
-        )
+        phrak_print(f"indexed {stats['chunks']} chunks from {stats['added']} files")
     phrak_print(f"asking :: {GREY}{question}{RESET}\n")
     render_markdown(app.rag.ask(app.llm, question, k=k))
 
@@ -214,11 +219,15 @@ def cmd_chat(args) -> int:
     commands = repl.setup_readline(app)
     from . import banner
 
-    print(f"  {GREEN}chat mode{RESET} {GREY}({session.model_desc}){RESET} — "
-          f"talk to PHRAK about the code in your workspace.")
-    print(f"  type {CYAN}/help{RESET} for commands, {CYAN}Tab{RESET} to "
-          f"autocomplete, {CYAN}↑/↓{RESET} to filter history. "
-          f"{GREY}Or just type to chat.{RESET}\n")
+    print(
+        f"  {GREEN}chat mode{RESET} {GREY}({session.model_desc}){RESET} — "
+        f"talk to PHRAK about the code in your workspace."
+    )
+    print(
+        f"  type {CYAN}/help{RESET} for commands, {CYAN}Tab{RESET} to "
+        f"autocomplete, {CYAN}↑/↓{RESET} to filter history. "
+        f"{GREY}Or just type to chat.{RESET}\n"
+    )
     while True:
         # Rebuilt every turn, reading the module colors live, so a runtime color
         # change takes effect on the next line rather than at the next restart.
@@ -254,8 +263,9 @@ def cmd_chat(args) -> int:
                     print(app.config.show())
                 else:
                     run_setup(_config_path(args))
-                    phrak_print("config saved — restart PHRAK to apply the new "
-                                "settings.")
+                    phrak_print(
+                        "config saved — restart PHRAK to apply the new " "settings."
+                    )
             elif cmd == "clone":
                 from .clone import clone_repo
 
@@ -265,18 +275,23 @@ def cmd_chat(args) -> int:
                 else:
                     do_index = "--index" in toks
                     toks = [t for t in toks if t != "--index"]
-                    res = clone_repo(app.config, toks[0],
-                                     toks[1] if len(toks) > 1 else "")
+                    res = clone_repo(
+                        app.config, toks[0], toks[1] if len(toks) > 1 else ""
+                    )
                     phrak_print(res.message)
                     if res.ok and do_index:
                         app.config.paths.workspace = res.dest
                         stats = app.rag.reindex()
-                        phrak_print(f"workspace -> {res.dest}; indexed "
-                                    f"{stats['chunks']} chunks")
+                        phrak_print(
+                            f"workspace -> {res.dest}; indexed "
+                            f"{stats['chunks']} chunks"
+                        )
             elif cmd == "ask":
                 if not rest:
-                    print("usage: /ask <question>   (add --reindex to refresh "
-                          "the index first)")
+                    print(
+                        "usage: /ask <question>   (add --reindex to refresh "
+                        "the index first)"
+                    )
                     continue
                 tokens = rest.split()
                 reindex = "--reindex" in tokens
@@ -326,8 +341,10 @@ def cmd_chat(args) -> int:
 
                 near = difflib.get_close_matches(cmd, commands, n=1, cutoff=0.5)
                 hint = f" did you mean {CYAN}/{near[0]}{RESET}?" if near else ""
-                print(f"unknown command '/{cmd}'.{hint} "
-                      f"type {CYAN}/help{RESET} for the list.")
+                print(
+                    f"unknown command '/{cmd}'.{hint} "
+                    f"type {CYAN}/help{RESET} for the list."
+                )
             continue
 
         # default: conversational turn with tool use + thread memory.
@@ -353,7 +370,6 @@ def cmd_clone(args) -> int:
     return 0 if res.ok else 1
 
 
-
 # ------------------------------------------------------------------- parser
 def build_parser() -> argparse.ArgumentParser:
     from . import __version__
@@ -361,15 +377,23 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Local AppSec agents + codebase Q&A")
     p.add_argument("--version", action="version", version=f"phrak {__version__}")
     p.add_argument(
-        "-c", "--config", default="",
+        "-c",
+        "--config",
+        default="",
         help="config path (default: <workspace>/.phrack/config.yaml)",
     )
     p.add_argument("-w", "--workspace", default="", help="override workspace root")
     p.add_argument("--no-color", action="store_true", help="disable ANSI colors")
-    p.add_argument("--quiet", action="store_true",
-                   help="suppress banners/status; print only results")
-    p.add_argument("--json", action="store_true",
-                   help="emit machine-readable JSON where supported (run)")
+    p.add_argument(
+        "--quiet",
+        action="store_true",
+        help="suppress banners/status; print only results",
+    )
+    p.add_argument(
+        "--json",
+        action="store_true",
+        help="emit machine-readable JSON where supported (run)",
+    )
     # No subcommand => conversational chat (like `claude` with no args).
     p.set_defaults(func=cmd_chat)
     sub = p.add_subparsers(dest="cmd", required=False)
@@ -379,8 +403,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # `config` is the primary setup command; `setup` kept as an alias.
     sp = sub.add_parser("config", help="interactive setup wizard (no AI)")
-    sp.add_argument("--show", action="store_true",
-                    help="print the current config (secrets redacted) and exit")
+    sp.add_argument(
+        "--show",
+        action="store_true",
+        help="print the current config (secrets redacted) and exit",
+    )
     sp.set_defaults(func=cmd_config)
     sub.add_parser("setup", help="alias for config").set_defaults(func=cmd_config)
     sub.add_parser("agents", help="list agents").set_defaults(func=cmd_agents)
@@ -388,7 +415,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("run", help="orchestrate agents on a request")
     sp.add_argument("request", nargs="+")
     sp.add_argument(
-        "-1", "--single", action="store_true",
+        "-1",
+        "--single",
+        action="store_true",
         help="route to a single best-fit agent (fast, no synthesis)",
     )
     sp.set_defaults(func=cmd_run)
@@ -411,8 +440,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("clone", help="shallow-clone a repo to analyze (no AI)")
     sp.add_argument("url")
     sp.add_argument("dest", nargs="?", default="")
-    sp.add_argument("--index", action="store_true",
-                    help="set the clone as workspace and build the RAG index")
+    sp.add_argument(
+        "--index",
+        action="store_true",
+        help="set the clone as workspace and build the RAG index",
+    )
     sp.add_argument("--recurse", action="store_true", help="fetch submodules")
     sp.set_defaults(func=cmd_clone)
 

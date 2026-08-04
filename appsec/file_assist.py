@@ -12,16 +12,68 @@ from typing import Optional
 
 # Source-ish extensions worth auto-reading when the model asks for code.
 _CODE_EXTS = {
-    "py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "php", "rb", "go", "java",
-    "kt", "c", "cc", "cpp", "h", "hpp", "cs", "rs", "sql", "html", "htm",
-    "yaml", "yml", "json", "toml", "ini", "cfg", "conf", "env", "sh", "bash",
-    "xml", "tf", "gradle", "pl", "scala", "swift", "vue", "svelte", "erb", "ejs",
+    "py",
+    "js",
+    "mjs",
+    "cjs",
+    "ts",
+    "tsx",
+    "jsx",
+    "php",
+    "rb",
+    "go",
+    "java",
+    "kt",
+    "c",
+    "cc",
+    "cpp",
+    "h",
+    "hpp",
+    "cs",
+    "rs",
+    "sql",
+    "html",
+    "htm",
+    "yaml",
+    "yml",
+    "json",
+    "toml",
+    "ini",
+    "cfg",
+    "conf",
+    "env",
+    "sh",
+    "bash",
+    "xml",
+    "tf",
+    "gradle",
+    "pl",
+    "scala",
+    "swift",
+    "vue",
+    "svelte",
+    "erb",
+    "ejs",
 }
 # Dirs to skip when building a workspace overview (noise / huge / non-source).
 _SKIP_DIRS = {
-    ".git", "venv", ".venv", "env", "__pycache__", "node_modules", ".mypy_cache",
-    ".ruff_cache", ".pytest_cache", "data", ".phrack", ".idea", ".vscode",
-    "dist", "build", ".tox", "site-packages",
+    ".git",
+    "venv",
+    ".venv",
+    "env",
+    "__pycache__",
+    "node_modules",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    "data",
+    ".phrack",
+    ".idea",
+    ".vscode",
+    "dist",
+    "build",
+    ".tox",
+    "site-packages",
 }
 # Prose that means "the model gave up and is asking the user to hand it code"
 # instead of reading it with the read_file tool.
@@ -108,8 +160,7 @@ def maybe_satisfy_file_request(tools: list, answer: str) -> Optional[str]:
         if ext in _CODE_EXTS and tok not in named:
             named.append(tok)
     workspace_src = [
-        f for f in workspace_files()
-        if f.rsplit(".", 1)[-1].lower() in _CODE_EXTS
+        f for f in workspace_files() if f.rsplit(".", 1)[-1].lower() in _CODE_EXTS
     ]
     # Try the files it named; if none are readable (e.g. it hallucinated
     # "app.py"), fall back to the real workspace source files.
@@ -134,8 +185,11 @@ def read_and_pack(
             content = f"(could not read: {e})"
         content = content if isinstance(content, str) else str(content)
         low = content.lower()
-        if (low.startswith("not a file") or low.startswith("not found")
-                or content.startswith("Path '")):
+        if (
+            low.startswith("not a file")
+            or low.startswith("not found")
+            or content.startswith("Path '")
+        ):
             continue
         snippet = content[: max(2000, budget - used)]
         used += len(snippet)
@@ -147,7 +201,8 @@ def read_and_pack(
     return (
         "You asked for file contents — but you can read files yourself with "
         "read_file, so NEVER ask the user to paste code. Here are the relevant "
-        "workspace files:\n\n" + "\n\n".join(blocks) +
-        "\n\nNow continue the analysis using this code, read any other files you "
+        "workspace files:\n\n"
+        + "\n\n".join(blocks)
+        + "\n\nNow continue the analysis using this code, read any other files you "
         "need with read_file, and produce the COMPLETE final report."
     )

@@ -11,8 +11,7 @@ from .banner import CYAN, GREEN, GREY, RESET
 
 def command_names(app) -> list[str]:
     """All slash-command names available in chat, including dynamic agents."""
-    names = ["help", "agents", "ask", "run", "route",
-             "clone", "config", "quit"]
+    names = ["help", "agents", "ask", "run", "route", "clone", "config", "quit"]
     names += list(app.registry.names())
     # de-dupe while preserving order
     seen: dict[str, None] = {}
@@ -91,21 +90,32 @@ def _save_history(readline, hist_file) -> None:
 def chat_help(app) -> None:
     """Print the grouped list of chat slash commands."""
     groups: list[tuple[str, list[tuple[str, str]]]] = [
-        ("analyze", [
-            ("/ask <text>", "answer a question grounded in the codebase (RAG)"),
-            ("/run <text>", "full multi-agent assessment + saved report"),
-            ("/route <text>", "auto-route to the single best-fit agent"),
-        ]),
-        ("agents", [(f"/{n} <text>", app.registry.get(n).description)
-                    for n in app.registry.names()]
-                   + [("/agents [--verbose]", "list agents (and their tools)")]),
-        ("system", [
-            ("/clone <url> [dest] [--index]", "shallow-clone a repo to analyze"),
-            ("/config [--show]", "setup wizard (or show redacted config)"),
-            ("/help", "show this list"),
-            ("/quit", "exit PHRAK"),
-            ("<text>", "just chat — PHRAK reads code and answers, keeping context"),
-        ]),
+        (
+            "analyze",
+            [
+                ("/ask <text>", "answer a question grounded in the codebase (RAG)"),
+                ("/run <text>", "full multi-agent assessment + saved report"),
+                ("/route <text>", "auto-route to the single best-fit agent"),
+            ],
+        ),
+        (
+            "agents",
+            [
+                (f"/{n} <text>", app.registry.get(n).description)
+                for n in app.registry.names()
+            ]
+            + [("/agents [--verbose]", "list agents (and their tools)")],
+        ),
+        (
+            "system",
+            [
+                ("/clone <url> [dest] [--index]", "shallow-clone a repo to analyze"),
+                ("/config [--show]", "setup wizard (or show redacted config)"),
+                ("/help", "show this list"),
+                ("/quit", "exit PHRAK"),
+                ("<text>", "just chat — PHRAK reads code and answers, keeping context"),
+            ],
+        ),
     ]
     all_rows = [r for _, rows in groups for r in rows]
     width = max(len(c) for c, _ in all_rows)

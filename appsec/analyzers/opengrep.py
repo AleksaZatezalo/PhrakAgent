@@ -41,7 +41,9 @@ def _owasp(meta: dict) -> list[str]:
     return [" ".join(str(x).split()) for x in raw if str(x).strip()]
 
 
-def normalize(data: dict, root: Path, config: str = DEFAULT_CONFIG) -> list[SecurityFinding]:
+def normalize(
+    data: dict, root: Path, config: str = DEFAULT_CONFIG
+) -> list[SecurityFinding]:
     """Turn Opengrep ``--json`` output into unconfirmed SecurityFinding leads."""
     findings: list[SecurityFinding] = []
     for r in data.get("results", []):
@@ -57,7 +59,7 @@ def normalize(data: dict, root: Path, config: str = DEFAULT_CONFIG) -> list[Secu
             _CONFIDENCE.get(str(meta.get("confidence", "")).upper(), 0.5),
             ANALYZER_LEAD_MAX_CONFIDENCE,
         )
-        title = (message[:120] or check or "opengrep finding")
+        title = message[:120] or check or "opengrep finding"
         finding = SecurityFinding(
             title=title,
             description=message,
@@ -66,17 +68,19 @@ def normalize(data: dict, root: Path, config: str = DEFAULT_CONFIG) -> list[Secu
             category=check or "static-analysis",
             severity=severity,
             confidence=confidence,
-            status="unconfirmed",           # a pattern hit is a lead, never confirmed
+            status="unconfirmed",  # a pattern hit is a lead, never confirmed
             cwe_ids=extract_cwe(meta.get("cwe"), check, message),
             owasp_categories=_owasp(meta),
             affected_files=[path] if path else [],
-            evidence=[FindingEvidence(
-                path=path,
-                start_line=start if isinstance(start, int) else None,
-                end_line=end if isinstance(end, int) else None,
-                reason=message[:200],
-                evidence_type="analyzer_hit",
-            )],
+            evidence=[
+                FindingEvidence(
+                    path=path,
+                    start_line=start if isinstance(start, int) else None,
+                    end_line=end if isinstance(end, int) else None,
+                    reason=message[:200],
+                    evidence_type="analyzer_hit",
+                )
+            ],
             source_tools=["opengrep"],
             source_agent="opengrep",
         ).ensure_identity()

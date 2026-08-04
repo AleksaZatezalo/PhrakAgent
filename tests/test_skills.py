@@ -11,8 +11,11 @@ from appsec.runtime import set_active_agent
 from appsec.tools.skills_tool import load_skill
 
 THREAT_SKILLS = {
-    "executive-summary", "system-architecture", "data-flow",
-    "pasta-threat-analysis", "threat-details",
+    "executive-summary",
+    "system-architecture",
+    "data-flow",
+    "pasta-threat-analysis",
+    "threat-details",
 }
 OWASP_SKILLS = {f"a{n:02d}" for n in range(1, 11)}
 

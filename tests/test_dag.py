@@ -16,9 +16,11 @@ from tests.conftest import FakeLLM
 
 def _registry():
     reg = AgentRegistry()
-    for n, d in (("code_review", "reviews code"),
-                 ("threat_model", "threat model"),
-                 ("test_case", "builds test cases")):
+    for n, d in (
+        ("code_review", "reviews code"),
+        ("threat_model", "threat model"),
+        ("test_case", "builds test cases"),
+    ):
         reg.register(AgentSpec(n, d, "p"))
     return reg
 
@@ -28,7 +30,7 @@ class RecordingOrch(Orchestrator):
 
     def __init__(self, *a, fail: set | None = None, **k):
         super().__init__(*a, **k)
-        self.calls: list[tuple[str, str]] = []   # (agent, context)
+        self.calls: list[tuple[str, str]] = []  # (agent, context)
         self.active = 0
         self.max_active = 0
         self._lock = threading.Lock()
@@ -55,24 +57,28 @@ def _orch(llm, config, **k):
 
 # --------------------------------------------------------------- planning
 def test_plan_dag_parses_dependencies(config):
-    llm = FakeLLM(reply='{"tasks": ['
-                  '{"id": "t1", "agent": "code_review", "task": "review",'
-                  ' "depends_on": [], "parallel_group": "a"},'
-                  '{"id": "t2", "agent": "test_case", "task": "tests",'
-                  ' "depends_on": ["t1"], "parallel_group": ""}]}')
+    llm = FakeLLM(
+        reply='{"tasks": ['
+        '{"id": "t1", "agent": "code_review", "task": "review",'
+        ' "depends_on": [], "parallel_group": "a"},'
+        '{"id": "t2", "agent": "test_case", "task": "tests",'
+        ' "depends_on": ["t1"], "parallel_group": ""}]}'
+    )
     tasks = _orch(llm, config).plan_dag("assess")
     assert [t.id for t in tasks] == ["t1", "t2"]
     assert tasks[1].depends_on == ["t1"]
 
 
 def test_plan_dag_drops_dangling_deps_and_unknown_agents(config):
-    llm = FakeLLM(reply='{"tasks": ['
-                  '{"id": "t1", "agent": "nope", "task": "x"},'
-                  '{"id": "t2", "agent": "code_review", "task": "y",'
-                  ' "depends_on": ["ghost", "t2"]}]}')
+    llm = FakeLLM(
+        reply='{"tasks": ['
+        '{"id": "t1", "agent": "nope", "task": "x"},'
+        '{"id": "t2", "agent": "code_review", "task": "y",'
+        ' "depends_on": ["ghost", "t2"]}]}'
+    )
     tasks = _orch(llm, config).plan_dag("x")
     assert [t.id for t in tasks] == ["t2"]
-    assert tasks[0].depends_on == []          # ghost + self-dep dropped
+    assert tasks[0].depends_on == []  # ghost + self-dep dropped
 
 
 def test_plan_dag_falls_back_to_linear(config):
@@ -107,7 +113,7 @@ def test_run_dag_runs_independent_tasks_in_parallel(config):
         Task(id="t3", agent="test_case", task="c", parallel_group="g"),
     ]
     orch.run_dag("assess", plan=plan)
-    assert orch.max_active >= 2          # genuinely concurrent
+    assert orch.max_active >= 2  # genuinely concurrent
 
 
 def test_run_dag_isolates_partial_failure(config):
@@ -115,13 +121,13 @@ def test_run_dag_isolates_partial_failure(config):
     plan = [
         Task(id="t1", agent="code_review", task="review"),
         Task(id="t2", agent="test_case", task="tests", depends_on=["t1"]),
-        Task(id="t3", agent="threat_model", task="model"),   # independent -> survives
+        Task(id="t3", agent="threat_model", task="model"),  # independent -> survives
     ]
     result = orch.run_dag("assess", plan=plan)
     st = {t.id: t.status for t in result["dag"]}
     assert st["t1"] == "failed"
-    assert st["t2"] == "skipped"          # dependent on the failed task
-    assert st["t3"] == "done"             # independent task still ran
+    assert st["t2"] == "skipped"  # dependent on the failed task
+    assert st["t3"] == "done"  # independent task still ran
 
 
 def test_run_dag_synthesis_notes_coverage(config):
@@ -142,5 +148,5 @@ def test_run_dag_breaks_dependency_cycle(config):
         Task(id="t1", agent="code_review", task="a", depends_on=["t2"]),
         Task(id="t2", agent="threat_model", task="b", depends_on=["t1"]),
     ]
-    result = orch.run_dag("assess", plan=plan)   # must not hang
+    result = orch.run_dag("assess", plan=plan)  # must not hang
     assert all(t.status == "skipped" for t in result["dag"])

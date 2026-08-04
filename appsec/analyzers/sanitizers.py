@@ -12,22 +12,43 @@ from dataclasses import dataclass, field
 _CATEGORY_ALIASES = {
     "sql_injection": ["sql", "sqli", "sql-injection", "sql injection"],
     "command_injection": [
-        "command", "command-injection", "command injection", "cmd", "os-command",
-        "rce", "os command injection",
+        "command",
+        "command-injection",
+        "command injection",
+        "cmd",
+        "os-command",
+        "rce",
+        "os command injection",
     ],
     "xss": ["xss", "cross-site-scripting", "cross site scripting", "html-injection"],
     "path_traversal": [
-        "path", "path-traversal", "path traversal", "traversal", "lfi",
-        "directory-traversal", "file-read", "file inclusion",
+        "path",
+        "path-traversal",
+        "path traversal",
+        "traversal",
+        "lfi",
+        "directory-traversal",
+        "file-read",
+        "file inclusion",
     ],
     "ssrf": ["ssrf", "server-side-request-forgery", "server side request forgery"],
     "open_redirect": ["open-redirect", "open redirect", "redirect"],
     "ldap_injection": ["ldap", "ldap-injection", "ldap injection"],
-    "deserialization": ["deserialization", "deserialisation", "insecure-deserialization"],
+    "deserialization": [
+        "deserialization",
+        "deserialisation",
+        "insecure-deserialization",
+    ],
     "xxe": ["xxe", "xml-external-entity"],
     "authz": [
-        "authz", "authorization", "authorisation", "access-control",
-        "broken-access-control", "idor", "bola", "access control",
+        "authz",
+        "authorization",
+        "authorisation",
+        "access-control",
+        "broken-access-control",
+        "idor",
+        "bola",
+        "access control",
     ],
     "authn": ["authn", "authentication", "login"],
 }
@@ -35,35 +56,70 @@ _CATEGORY_ALIASES = {
 # ---- canonical sanitizers/controls -----------------------------------------
 _SANITIZER_ALIASES = {
     "html_escape": [
-        "html.escape", "html_escape", "markupsafe.escape", "markupsafe",
-        "cgi.escape", "escape_html", "htmlspecialchars", "htmlescape",
+        "html.escape",
+        "html_escape",
+        "markupsafe.escape",
+        "markupsafe",
+        "cgi.escape",
+        "escape_html",
+        "htmlspecialchars",
+        "htmlescape",
     ],
     "parameterized_query": [
-        "parameterized", "parameterised", "parameterized-query", "prepared",
-        "prepared-statement", "bound-parameters", "bind", "placeholder",
-        "query-parameters", "execute-params",
+        "parameterized",
+        "parameterised",
+        "parameterized-query",
+        "prepared",
+        "prepared-statement",
+        "bound-parameters",
+        "bind",
+        "placeholder",
+        "query-parameters",
+        "execute-params",
     ],
     "int_cast": ["int", "int()", "int-cast", "integer", "integer-cast", "to_int"],
     "shlex_quote": ["shlex.quote", "shlex_quote", "shlex", "quote", "pipes.quote"],
     "arg_array": ["arg-array", "argument-array", "arg_list", "list-args", "no-shell"],
     "url_parse": [
-        "urlparse", "urlsplit", "url-parse", "url.parse", "parse-url", "urllib.parse",
+        "urlparse",
+        "urlsplit",
+        "url-parse",
+        "url.parse",
+        "parse-url",
+        "urllib.parse",
     ],
     "allowlist_host": [
-        "allowlist", "allowlist-host", "whitelist", "resolve-and-check-ip",
-        "ip-allowlist", "dns-pin",
+        "allowlist",
+        "allowlist-host",
+        "whitelist",
+        "resolve-and-check-ip",
+        "ip-allowlist",
+        "dns-pin",
     ],
     "prefix_check": [
-        "prefix-check", "startswith", "starts-with", "prefix", "basedir-check",
+        "prefix-check",
+        "startswith",
+        "starts-with",
+        "prefix",
+        "basedir-check",
     ],
     "canonicalize": [
-        "canonicalize", "realpath", "os.path.realpath", "abspath", "normpath",
+        "canonicalize",
+        "realpath",
+        "os.path.realpath",
+        "abspath",
+        "normpath",
         "resolve",
     ],
     "authentication": ["authentication", "login-required", "authn", "is-authenticated"],
     "authorization": [
-        "authorization", "authorisation", "authz", "ownership-check",
-        "role-check", "permission-check", "access-control-check",
+        "authorization",
+        "authorisation",
+        "authz",
+        "ownership-check",
+        "role-check",
+        "permission-check",
+        "access-control-check",
     ],
 }
 
@@ -79,7 +135,13 @@ class _Entry:
 _TABLE: dict[str, _Entry] = {
     "html_escape": _Entry(
         {"xss"},
-        {"sql_injection", "command_injection", "path_traversal", "ssrf", "ldap_injection"},
+        {
+            "sql_injection",
+            "command_injection",
+            "path_traversal",
+            "ssrf",
+            "ldap_injection",
+        },
         "HTML output-encoding is safe only in an HTML context; it does not make a "
         "value SQL-, shell-, path-, or URL-safe.",
     ),
@@ -90,8 +152,13 @@ _TABLE: dict[str, _Entry] = {
         "is irrelevant to non-SQL sinks.",
     ),
     "int_cast": _Entry(
-        {"sql_injection", "command_injection", "path_traversal", "open_redirect",
-         "ldap_injection"},
+        {
+            "sql_injection",
+            "command_injection",
+            "path_traversal",
+            "open_redirect",
+            "ldap_injection",
+        },
         set(),
         "Coercing to int destroys any injection payload when the value must be numeric.",
     ),
@@ -130,8 +197,8 @@ _TABLE: dict[str, _Entry] = {
 class SanitizerAssessment:
     sanitizer: str
     category: str
-    effective: bool | None            # True / False / None (unknown)
-    false_assumption: bool            # True: commonly believed protective but isn't (here)
+    effective: bool | None  # True / False / None (unknown)
+    false_assumption: bool  # True: commonly believed protective but isn't (here)
     reason: str
 
     def render(self) -> str:
@@ -139,16 +206,23 @@ class SanitizerAssessment:
             self.effective
         ]
         flag = "  ⚠ FALSE-SANITIZER ASSUMPTION" if self.false_assumption else ""
-        return (f"{self.sanitizer} vs {self.category}: {verdict}{flag}\n"
-                f"  {self.reason}")
+        return (
+            f"{self.sanitizer} vs {self.category}: {verdict}{flag}\n" f"  {self.reason}"
+        )
 
 
 def _canon(value: str, aliases: dict[str, list[str]]) -> str:
     v = (value or "").strip().lower()
     # tolerate "html.escape()" / "shlex.quote(x)" and space/underscore/hyphen mixes
     base = v.split("(")[0].strip()
-    variants = {v, base, base.replace(" ", "-"), base.replace(" ", "_"),
-                base.replace("_", "-"), base.replace("-", " ")}
+    variants = {
+        v,
+        base,
+        base.replace(" ", "-"),
+        base.replace(" ", "_"),
+        base.replace("_", "-"),
+        base.replace("-", " "),
+    }
     if v in aliases:
         return v
     for canon, names in aliases.items():
@@ -187,55 +261,78 @@ def assess(
         if c == "command_injection":
             if shell:
                 return SanitizerAssessment(
-                    s, c, False, True,
+                    s,
+                    c,
+                    False,
+                    True,
                     "shlex.quote with shell=True is fragile — quoting is easy to "
                     "misapply and shell parsing still occurs. Use an argument array "
                     "(shell=False) so no shell interprets the value.",
                 )
             return SanitizerAssessment(
-                s, c, True, False,
+                s,
+                c,
+                True,
+                False,
                 "With shell=False (argument array) no shell parses the value, so "
                 "command injection is prevented regardless of quoting.",
             )
         return SanitizerAssessment(
-            s, c, False, False,
+            s,
+            c,
+            False,
+            False,
             "shell quoting is unrelated to this sink class.",
         )
 
     if s == "url_parse":
         if c == "ssrf":
             return SanitizerAssessment(
-                s, c, False, True,
+                s,
+                c,
+                False,
+                True,
                 "Parsing a URL does not validate its destination. DNS rebinding, "
                 "HTTP redirects, and encoded/alternate IPs (e.g. 0x7f.1, [::1], "
                 "decimal) bypass a naive parse. Resolve the host and allowlist the "
                 "resolved IP instead.",
             )
         return SanitizerAssessment(
-            s, c, False, False, "URL parsing is unrelated to this sink class.")
+            s, c, False, False, "URL parsing is unrelated to this sink class."
+        )
 
     if s == "prefix_check":
         if c == "path_traversal":
             if canonicalized:
                 return SanitizerAssessment(
-                    s, c, True, False,
+                    s,
+                    c,
+                    True,
+                    False,
                     "Checking the prefix AFTER canonicalization (realpath) is a "
                     "sound base-dir containment check.",
                 )
             return SanitizerAssessment(
-                s, c, False, True,
+                s,
+                c,
+                False,
+                True,
                 "A prefix/startswith check BEFORE canonicalization is bypassable "
                 "with ../ sequences and symlinks. Canonicalize (realpath) first, "
                 "then check the result is under the base directory.",
             )
         return SanitizerAssessment(
-            s, c, False, False, "A path prefix check is unrelated to this sink class.")
+            s, c, False, False, "A path prefix check is unrelated to this sink class."
+        )
 
     # ---- table-driven controls ----
     entry = _TABLE.get(s)
     if entry is None:
         return SanitizerAssessment(
-            s, c, None, False,
+            s,
+            c,
+            None,
+            False,
             "Unknown control — cannot assert effectiveness; verify by reading the "
             "code and the sink's escaping requirements.",
         )
@@ -243,10 +340,16 @@ def assess(
         return SanitizerAssessment(s, c, True, False, entry.note)
     if c in entry.ineffective:
         return SanitizerAssessment(
-            s, c, False, True,
+            s,
+            c,
+            False,
+            True,
             f"{entry.note} It does not mitigate {c}.",
         )
     return SanitizerAssessment(
-        s, c, None, False,
+        s,
+        c,
+        None,
+        False,
         f"No effectiveness recorded for {s} against {c}; {entry.note}",
     )

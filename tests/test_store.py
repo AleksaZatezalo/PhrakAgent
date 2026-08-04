@@ -28,13 +28,18 @@ def _finding(**over) -> SecurityFinding:
         confidence=0.8,
         status="new",
         affected_files=["vuln_app.py"],
-        evidence=[FindingEvidence(path="vuln_app.py", start_line=11,
-                                  reason="tainted execute")],
-        taint_paths=[TaintPathReference(
-            source=TaintNode(path="vuln_app.py", line=10, kind="source"),
-            sink=TaintNode(path="vuln_app.py", line=11, kind="sink"),
-            completeness="partial", analysis_mode="syntactic", confidence=0.5,
-        )],
+        evidence=[
+            FindingEvidence(path="vuln_app.py", start_line=11, reason="tainted execute")
+        ],
+        taint_paths=[
+            TaintPathReference(
+                source=TaintNode(path="vuln_app.py", line=10, kind="source"),
+                sink=TaintNode(path="vuln_app.py", line=11, kind="sink"),
+                completeness="partial",
+                analysis_mode="syntactic",
+                confidence=0.5,
+            )
+        ],
         source_agent="code_review",
     )
     base.update(over)
@@ -46,16 +51,16 @@ def test_effective_status_precedence():
     f = _finding(status="unconfirmed")
     assert f.effective_status() == "unconfirmed"
     f.runtime_status = "confirmed"
-    assert f.effective_status() == "confirmed"        # runtime wins over agent
+    assert f.effective_status() == "confirmed"  # runtime wins over agent
     f.human_status = "false_positive"
-    assert f.effective_status() == "false_positive"   # human wins over runtime
+    assert f.effective_status() == "false_positive"  # human wins over runtime
 
 
 def test_effective_status_ignores_empty_tracks():
     f = _finding(status="new")
     f.runtime_status = ""
     f.human_status = ""
-    assert f.effective_status() == "new"              # falls back to the agent track
+    assert f.effective_status() == "new"  # falls back to the agent track
 
 
 # --------------------------------------------------------------- upsert / dedup
@@ -96,14 +101,18 @@ def test_runtime_track_is_independent(config):
     store = FindingStore(config)
     store.upsert([_finding(status="new")], run_id="r1")
     fid = store.list()[0].id
-    rec, msg = store.set_status(fid, "false_positive", actor="runtime",
-                                note="html.escape not relevant but input is bound",
-                                confidence=0.2)
+    rec, msg = store.set_status(
+        fid,
+        "false_positive",
+        actor="runtime",
+        note="html.escape not relevant but input is bound",
+        confidence=0.2,
+    )
     assert rec is not None and "runtime_status" in msg
     f = store.get(fid).as_finding()
     assert f.runtime_status == "false_positive"
-    assert f.status == "new"            # agent track untouched
-    assert f.confidence == 0.2          # the re-check adjusted confidence
+    assert f.status == "new"  # agent track untouched
+    assert f.confidence == 0.2  # the re-check adjusted confidence
     # the rationale stays attributable on the history entry
     assert rec.history[-1]["note"].startswith("html.escape")
 

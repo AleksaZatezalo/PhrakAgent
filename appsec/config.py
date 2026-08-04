@@ -35,9 +35,9 @@ PROVIDERS = ("ollama", "anthropic")
 # Suggested Claude models, most capable first. The wizard offers the first as
 # the default; any model ID the API accepts can be typed in instead.
 ANTHROPIC_MODELS = (
-    "claude-opus-5",       # most capable; the default
-    "claude-sonnet-5",     # faster/cheaper, near-Opus on coding
-    "claude-haiku-4-5",    # cheapest, for simple passes
+    "claude-opus-5",  # most capable; the default
+    "claude-sonnet-5",  # faster/cheaper, near-Opus on coding
+    "claude-haiku-4-5",  # cheapest, for simple passes
 )
 
 
@@ -69,12 +69,12 @@ def credentials_path(workspace: str | Path = ".") -> Path:
 
 @dataclass
 class LLMConfig:
-    provider: str = "ollama"            # ollama (local) | anthropic (Claude API)
+    provider: str = "ollama"  # ollama (local) | anthropic (Claude API)
     model: str = "qwen2.5-coder:7b"
     base_url: str = OLLAMA_DEFAULT_URL  # Ollama server URL; "" -> provider default
-    temperature: float = 0.1            # dropped for Claude models that reject it
-    num_ctx: int = 16384                # ollama context window
-    max_tokens: int = 16000             # anthropic per-response output cap
+    temperature: float = 0.1  # dropped for Claude models that reject it
+    num_ctx: int = 16384  # ollama context window
+    max_tokens: int = 16000  # anthropic per-response output cap
 
 
 def provider_defaults(provider: str) -> LLMConfig:
@@ -87,17 +87,17 @@ def provider_defaults(provider: str) -> LLMConfig:
         return LLMConfig(
             provider="anthropic",
             model=ANTHROPIC_MODELS[0],
-            base_url="",            # the SDK's own endpoint
+            base_url="",  # the SDK's own endpoint
         )
     return LLMConfig(provider=provider)
 
 
 @dataclass
 class EmbeddingsConfig:
-    provider: str = "default"           # default (local onnx) | ollama
-    model: str = "nomic-embed-text"     # used by ollama provider
-    base_url: str = ""                  # ollama URL for embeddings; "" -> derive
-                                        # (needed when the LLM isn't Ollama)
+    provider: str = "default"  # default (local onnx) | ollama
+    model: str = "nomic-embed-text"  # used by ollama provider
+    base_url: str = ""  # ollama URL for embeddings; "" -> derive
+    # (needed when the LLM isn't Ollama)
 
 
 @dataclass
@@ -106,41 +106,75 @@ class RagConfig:
 
     persist_dir: str = f"{PHRACK_DIRNAME}/rag"  # relative -> resolved vs workspace
     collection: str = "phrak_code"
-    recall_k: int = 6                  # chunks retrieved per question
-    chunk_lines: int = 60              # lines per indexed chunk
-    chunk_overlap: int = 10            # overlapping lines between chunks
-    max_file_kb: int = 256            # skip files larger than this
-    include_ext: list[str] = field(default_factory=lambda: [
-        ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".rb",
-        ".php", ".c", ".h", ".cpp", ".hpp", ".cs", ".sh", ".sql", ".yaml",
-        ".yml", ".toml", ".ini", ".cfg", ".md", ".rst", ".txt",
-    ])
+    recall_k: int = 6  # chunks retrieved per question
+    chunk_lines: int = 60  # lines per indexed chunk
+    chunk_overlap: int = 10  # overlapping lines between chunks
+    max_file_kb: int = 256  # skip files larger than this
+    include_ext: list[str] = field(
+        default_factory=lambda: [
+            ".py",
+            ".js",
+            ".ts",
+            ".tsx",
+            ".jsx",
+            ".go",
+            ".rs",
+            ".java",
+            ".rb",
+            ".php",
+            ".c",
+            ".h",
+            ".cpp",
+            ".hpp",
+            ".cs",
+            ".sh",
+            ".sql",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".ini",
+            ".cfg",
+            ".md",
+            ".rst",
+            ".txt",
+        ]
+    )
     # Note: ``.phrack`` is intentionally NOT excluded — /ask indexes the
     # workspace's reports/learned-skills/config living there. The vector store
     # sub-dir (``.phrack/rag``) is skipped by path in CodeIndex._iter_files.
-    exclude_dirs: list[str] = field(default_factory=lambda: [
-        "venv", ".venv", "node_modules", "__pycache__", "data", "dist",
-        "build", ".git", ".pytest_cache", "site-packages",
-    ])
+    exclude_dirs: list[str] = field(
+        default_factory=lambda: [
+            "venv",
+            ".venv",
+            "node_modules",
+            "__pycache__",
+            "data",
+            "dist",
+            "build",
+            ".git",
+            ".pytest_cache",
+            "site-packages",
+        ]
+    )
     embeddings: EmbeddingsConfig = field(default_factory=EmbeddingsConfig)
 
 
 @dataclass
 class PathsConfig:
-    skills_dir: str = f"{PHRACK_DIRNAME}/skills"    # relative -> vs workspace
+    skills_dir: str = f"{PHRACK_DIRNAME}/skills"  # relative -> vs workspace
     reports_dir: str = f"{PHRACK_DIRNAME}/reports"  # relative -> vs workspace
-    workspace: str = "."               # root the read-only file tools operate under
-                                       # (and where .phrack/ is anchored)
-    clones_dir: str = "clones"         # where `phrak clone` shallow-clones repos
+    workspace: str = "."  # root the read-only file tools operate under
+    # (and where .phrack/ is anchored)
+    clones_dir: str = "clones"  # where `phrak clone` shallow-clones repos
 
 
 @dataclass
 class OrchestratorConfig:
     """How the multi-agent orchestrator plans and executes work (Phase 8)."""
 
-    mode: str = "dag"                  # "dag" (dependency graph) | "linear"
-    max_concurrency: int = 3           # bounded parallel fan-out
-    continue_on_failure: bool = True   # isolate a failed task; keep the rest going
+    mode: str = "dag"  # "dag" (dependency graph) | "linear"
+    max_concurrency: int = 3  # bounded parallel fan-out
+    continue_on_failure: bool = True  # isolate a failed task; keep the rest going
 
 
 @dataclass
@@ -156,12 +190,12 @@ class Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
     rag: RagConfig = field(default_factory=RagConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
-    max_steps: int = 40                 # per-round tool-call recursion budget
-    max_rounds: int = 4                 # times an agent may be nudged to finish
-                                        # the report before giving up (run-to-done)
-    keep_reports: int = 50              # keep newest N reports; older auto-deleted.
-                                        # 0 = keep everything
-    enable_git_clone: bool = False      # expose the guarded git_clone tool to agents
+    max_steps: int = 40  # per-round tool-call recursion budget
+    max_rounds: int = 4  # times an agent may be nudged to finish
+    # the report before giving up (run-to-done)
+    keep_reports: int = 50  # keep newest N reports; older auto-deleted.
+    # 0 = keep everything
+    enable_git_clone: bool = False  # expose the guarded git_clone tool to agents
     orchestrator: OrchestratorConfig = field(default_factory=OrchestratorConfig)
     analyzers: AnalyzersConfig = field(default_factory=AnalyzersConfig)
     # Per-agent LLM overrides, e.g. {"threat_model": {"model": "glm-4.7-flash"}}.
@@ -230,7 +264,10 @@ class Config:
         if not override:
             return self.llm
         base = self.llm
-        if str(override.get("provider", base.provider)).lower() != base.provider.lower():
+        if (
+            str(override.get("provider", base.provider)).lower()
+            != base.provider.lower()
+        ):
             base = provider_defaults(str(override["provider"]))
         merged = dict(base.__dict__)
         for k, v in override.items():
@@ -305,7 +342,7 @@ class Config:
 
     def save(self, path: str = DEFAULT_CONFIG_PATH) -> None:
         p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)   # create .phrack/ if needed
+        p.parent.mkdir(parents=True, exist_ok=True)  # create .phrack/ if needed
         p.write_text(yaml.safe_dump(self.to_dict(), sort_keys=False))
 
     def ensure_dirs(self) -> None:

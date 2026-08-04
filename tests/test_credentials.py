@@ -184,7 +184,7 @@ def test_agent_override_switching_provider_drops_ollama_url(config):
     assert sub.provider == "anthropic"
     assert sub.base_url == ""
     assert sub.model == "claude-opus-5"
-    assert config.llm_for("code_review").provider == "ollama"   # base untouched
+    assert config.llm_for("code_review").provider == "ollama"  # base untouched
 
 
 def test_agent_override_same_provider_still_inherits(config):

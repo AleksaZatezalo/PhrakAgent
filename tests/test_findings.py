@@ -21,12 +21,21 @@ from appsec.models.findings import (
 
 def _sqli_taint_path(complete: bool = True) -> TaintPathReference:
     return TaintPathReference(
-        source=TaintNode(path="app.py", line=3, expression="request.args['id']",
-                         kind="source"),
-        sink=TaintNode(path="app.py", line=5, expression="cursor.execute(q)",
-                       kind="sink"),
-        steps=[TaintStep(path="app.py", line=4, operation="assignment",
-                         from_expression="uid", to_expression="q")],
+        source=TaintNode(
+            path="app.py", line=3, expression="request.args['id']", kind="source"
+        ),
+        sink=TaintNode(
+            path="app.py", line=5, expression="cursor.execute(q)", kind="sink"
+        ),
+        steps=[
+            TaintStep(
+                path="app.py",
+                line=4,
+                operation="assignment",
+                from_expression="uid",
+                to_expression="q",
+            )
+        ],
         completeness="complete" if complete else "partial",
         analysis_mode="intra_procedural",
         confidence=0.9 if complete else 0.4,
@@ -41,8 +50,14 @@ def _finding(**over) -> SecurityFinding:
         confidence=0.9,
         affected_files=["app.py"],
         affected_symbols=["get_user"],
-        evidence=[FindingEvidence(path="app.py", start_line=5, reason="tainted execute",
-                                  evidence_type="taint_step")],
+        evidence=[
+            FindingEvidence(
+                path="app.py",
+                start_line=5,
+                reason="tainted execute",
+                evidence_type="taint_step",
+            )
+        ],
         taint_paths=[_sqli_taint_path()],
         source_agent="code_review",
     )
@@ -133,23 +148,38 @@ def test_dedupe_merges_by_fingerprint_and_keeps_highest_confidence():
 
 # --------------------------------------------------------------- workspace grounding
 def test_validate_against_workspace_flags_escape_and_missing(tmp_path):
-    (tmp_path / "app.py").write_text("a\nb\nuid = request.args['id']\nq=uid\ncur.execute(q)\n")
+    (tmp_path / "app.py").write_text(
+        "a\nb\nuid = request.args['id']\nq=uid\ncur.execute(q)\n"
+    )
     # valid finding grounded in the real file
-    ok = _finding(evidence=[FindingEvidence(path="app.py", start_line=5,
-                                            snippet="cur.execute", reason="sink")])
+    ok = _finding(
+        evidence=[
+            FindingEvidence(
+                path="app.py", start_line=5, snippet="cur.execute", reason="sink"
+            )
+        ]
+    )
     assert validate_against_workspace(ok, tmp_path) == []
 
     # path escaping the workspace
-    esc = _finding(evidence=[FindingEvidence(path="../../etc/passwd", start_line=1,
-                                             reason="x")], taint_paths=[])
-    assert any("escapes workspace" in e for e in validate_against_workspace(esc, tmp_path))
+    esc = _finding(
+        evidence=[FindingEvidence(path="../../etc/passwd", start_line=1, reason="x")],
+        taint_paths=[],
+    )
+    assert any(
+        "escapes workspace" in e for e in validate_against_workspace(esc, tmp_path)
+    )
 
     # missing file
-    miss = _finding(evidence=[FindingEvidence(path="nope.py", start_line=1, reason="x")],
-                    taint_paths=[])
+    miss = _finding(
+        evidence=[FindingEvidence(path="nope.py", start_line=1, reason="x")],
+        taint_paths=[],
+    )
     assert any("not found" in e for e in validate_against_workspace(miss, tmp_path))
 
     # out-of-range line
-    oor = _finding(evidence=[FindingEvidence(path="app.py", start_line=999, reason="x")],
-                   taint_paths=[])
+    oor = _finding(
+        evidence=[FindingEvidence(path="app.py", start_line=999, reason="x")],
+        taint_paths=[],
+    )
     assert any("out of range" in e for e in validate_against_workspace(oor, tmp_path))

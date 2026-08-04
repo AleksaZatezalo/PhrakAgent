@@ -69,24 +69,39 @@ def clone_repo(
     git missing, escape attempt, oversize, timeout)."""
     url = (url or "").strip()
     if not valid_git_url(url):
-        return CloneResult(False, message=(
-            f"[REFUSED] '{url}' is not an accepted git URL. Use https:// or "
-            "git@host:path (no inline credentials, no file:// / local paths)."))
+        return CloneResult(
+            False,
+            message=(
+                f"[REFUSED] '{url}' is not an accepted git URL. Use https:// or "
+                "git@host:path (no inline credentials, no file:// / local paths)."
+            ),
+        )
 
     clones_root = config.clones_dir()
     clones_root.mkdir(parents=True, exist_ok=True)
     target = (clones_root / (dest or _repo_name(url))).resolve()
     if clones_root.resolve() != target and clones_root.resolve() not in target.parents:
-        return CloneResult(False, message=(
-            f"[REFUSED] destination escapes the clones area {clones_root}."))
+        return CloneResult(
+            False,
+            message=(f"[REFUSED] destination escapes the clones area {clones_root}."),
+        )
     if target.exists():
-        return CloneResult(False, message=(
-            f"[REFUSED] destination already exists: {target}. Remove it or pick "
-            "another name."))
+        return CloneResult(
+            False,
+            message=(
+                f"[REFUSED] destination already exists: {target}. Remove it or pick "
+                "another name."
+            ),
+        )
 
     cmd = [
-        "git", "-c", "core.hooksPath=/dev/null",  # never run hooks from a clone
-        "clone", "--depth", str(max(1, depth)), "--single-branch",
+        "git",
+        "-c",
+        "core.hooksPath=/dev/null",  # never run hooks from a clone
+        "clone",
+        "--depth",
+        str(max(1, depth)),
+        "--single-branch",
     ]
     if recurse:
         cmd += ["--recurse-submodules", "--shallow-submodules"]
@@ -96,15 +111,26 @@ def clone_repo(
     if res.error:
         return CloneResult(False, message=f"[ERROR] clone failed: {res.error}")
     if res.returncode != 0:
-        return CloneResult(False, message=(
-            f"[ERROR] git clone exited {res.returncode}: "
-            f"{(res.stderr or res.stdout).strip()[:400]}"))
+        return CloneResult(
+            False,
+            message=(
+                f"[ERROR] git clone exited {res.returncode}: "
+                f"{(res.stderr or res.stdout).strip()[:400]}"
+            ),
+        )
 
     size = _dir_size_mb(target)
     if size > max_mb:
         shutil.rmtree(target, ignore_errors=True)
-        return CloneResult(False, message=(
-            f"[REFUSED] clone is {size:.0f} MB, over the {max_mb} MB cap; removed. "
-            "Raise --max-mb if this is expected."))
-    return CloneResult(True, dest=str(target),
-                       message=f"Cloned into {target} ({size:.1f} MB, shallow).")
+        return CloneResult(
+            False,
+            message=(
+                f"[REFUSED] clone is {size:.0f} MB, over the {max_mb} MB cap; removed. "
+                "Raise --max-mb if this is expected."
+            ),
+        )
+    return CloneResult(
+        True,
+        dest=str(target),
+        message=f"Cloned into {target} ({size:.1f} MB, shallow).",
+    )

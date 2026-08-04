@@ -56,20 +56,27 @@ def report_finding(
     Findings whose evidence can't be located in the workspace are recorded as
     UNCONFIRMED. Returns the finding id + status, or a REJECTED message to fix."""
     ev_end = end_line or line
-    evidence = [FindingEvidence(
-        path=file, start_line=line, end_line=ev_end,
-        reason=(description or "")[:200], evidence_type="source_reference",
-    )]
+    evidence = [
+        FindingEvidence(
+            path=file,
+            start_line=line,
+            end_line=ev_end,
+            reason=(description or "")[:200],
+            evidence_type="source_reference",
+        )
+    ]
 
     taint_paths = []
     if sink_file and sink_line:
-        taint_paths.append(TaintPathReference(
-            source=TaintNode(path=file, line=line, kind="source"),
-            sink=TaintNode(path=sink_file, line=sink_line, kind="sink"),
-            completeness="partial",          # asserted by the model, not the engine
-            analysis_mode="syntactic",
-            confidence=min(max(confidence, 0.0), 1.0),
-        ))
+        taint_paths.append(
+            TaintPathReference(
+                source=TaintNode(path=file, line=line, kind="source"),
+                sink=TaintNode(path=sink_file, line=sink_line, kind="sink"),
+                completeness="partial",  # asserted by the model, not the engine
+                analysis_mode="syntactic",
+                confidence=min(max(confidence, 0.0), 1.0),
+            )
+        )
 
     finding = SecurityFinding(
         title=title,
@@ -92,8 +99,11 @@ def report_finding(
     # 1) structural validation — reject so the model can correct and resubmit.
     errs = validate_finding(finding)
     if errs:
-        return "REJECTED (not recorded): " + "; ".join(errs) + \
-               ". Fix these and call report_finding again."
+        return (
+            "REJECTED (not recorded): "
+            + "; ".join(errs)
+            + ". Fix these and call report_finding again."
+        )
 
     # 2) workspace grounding — downgrade (don't reject) if evidence isn't real.
     ground_errs = validate_against_workspace(finding, workspace())

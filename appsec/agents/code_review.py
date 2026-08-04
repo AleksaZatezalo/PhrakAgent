@@ -14,8 +14,7 @@ from ..tools.opengrep_tools import opengrep_tools
 
 
 def _tools() -> list:
-    tools = (read_only_tools() + opengrep_tools() + analyzer_tools()
-             + finding_tools())
+    tools = read_only_tools() + opengrep_tools() + analyzer_tools() + finding_tools()
     try:  # optional, off unless enabled in config
         from ..runtime import require_config
         from ..tools.clone_tool import git_clone_tools
@@ -24,6 +23,7 @@ def _tools() -> list:
     except Exception:
         pass
     return tools
+
 
 SYSTEM_PROMPT = """You are a senior application-security code reviewer.
 

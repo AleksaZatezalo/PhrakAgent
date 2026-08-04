@@ -104,7 +104,8 @@ class CodeIndex:
             # prune excluded and hidden dirs in place — but keep .phrack, and
             # never descend into the vector store directory.
             dirnames[:] = [
-                d for d in dirnames
+                d
+                for d in dirnames
                 if d not in excluded
                 and (not d.startswith(".") or d == PHRACK_DIRNAME)
                 and (Path(dirpath) / d).resolve() != store_dir
@@ -190,9 +191,7 @@ class CodeIndex:
         for start, end, body in chunks:
             header = f"{rel}:{start}-{end}"
             texts.append(f"# {header}\n{body}")
-            metas.append(
-                {"path": rel, "start": start, "end": end, "mtime": mtime}
-            )
+            metas.append({"path": rel, "start": start, "end": end, "mtime": mtime})
             ids.append(f"{rel}::{start}-{end}")
         self.store.add_texts(texts, metadatas=metas, ids=ids)
         return len(texts)
@@ -228,8 +227,12 @@ class CodeIndex:
                 self._delete_path(rel)
                 removed += 1
 
-        return {"added": added, "updated": updated, "removed": removed,
-                "chunks": chunks}
+        return {
+            "added": added,
+            "updated": updated,
+            "removed": removed,
+            "chunks": chunks,
+        }
 
     def index_file(self, path: str | Path) -> int:
         """Add or refresh ONE file's chunks; returns how many were indexed.
@@ -274,9 +277,7 @@ class CodeIndex:
             out.append((header, d.page_content))
         return out
 
-    def ask(
-        self, llm: BaseChatModel, question: str, k: Optional[int] = None
-    ) -> str:
+    def ask(self, llm: BaseChatModel, question: str, k: Optional[int] = None) -> str:
         """Answer ``question`` grounded in retrieved code, with citations."""
         if self.count() == 0:
             self.sync()
@@ -290,10 +291,10 @@ class CodeIndex:
         blocks = []
         for header, content in hits:
             # content already begins with a "# path:start-end" header line
-            blocks.append(content if content.startswith("# ") else f"# {header}\n{content}")
-        prompt = _ANSWER_PROMPT.format(
-            question=question, context="\n\n".join(blocks)
-        )
+            blocks.append(
+                content if content.startswith("# ") else f"# {header}\n{content}"
+            )
+        prompt = _ANSWER_PROMPT.format(question=question, context="\n\n".join(blocks))
         try:
             return message_text(llm.invoke(prompt))
         except Exception as e:

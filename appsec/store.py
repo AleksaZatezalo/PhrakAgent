@@ -59,13 +59,13 @@ class FindingRecord:
 
     fingerprint: str
     id: str
-    finding: dict                       # latest SecurityFinding snapshot
+    finding: dict  # latest SecurityFinding snapshot
     first_seen: str = ""
     last_seen: str = ""
-    runs: list[dict] = field(default_factory=list)       # per-run observations
-    history: list[dict] = field(default_factory=list)    # status/evidence changes
-    notes: list[dict] = field(default_factory=list)      # reviewer notes
-    resurfaced: bool = False            # material evidence change vs a human verdict
+    runs: list[dict] = field(default_factory=list)  # per-run observations
+    history: list[dict] = field(default_factory=list)  # status/evidence changes
+    notes: list[dict] = field(default_factory=list)  # reviewer notes
+    resurfaced: bool = False  # material evidence change vs a human verdict
 
     def as_finding(self) -> SecurityFinding:
         return SecurityFinding.from_dict(self.finding)
@@ -137,13 +137,21 @@ class FindingStore:
             if existing is None:
                 snap = f.to_dict()
                 rec = FindingRecord(
-                    fingerprint=f.fingerprint, id=f.id, finding=snap,
-                    first_seen=ts, last_seen=ts,
+                    fingerprint=f.fingerprint,
+                    id=f.id,
+                    finding=snap,
+                    first_seen=ts,
+                    last_seen=ts,
                     runs=[self._run_entry(f, run_id, ts)],
-                    history=[{
-                        "ts": ts, "actor": f.source_agent or "agent",
-                        "change": "created", "to": f.status, "run_id": run_id,
-                    }],
+                    history=[
+                        {
+                            "ts": ts,
+                            "actor": f.source_agent or "agent",
+                            "change": "created",
+                            "to": f.status,
+                            "run_id": run_id,
+                        }
+                    ],
                 )
                 records[f.fingerprint] = rec
                 touched.append(rec)
@@ -160,11 +168,16 @@ class FindingStore:
             existing.runs.append(self._run_entry(f, run_id, ts))
             if material and prev.human_status in ("false_positive", "accepted_risk"):
                 existing.resurfaced = True
-                existing.history.append({
-                    "ts": ts, "actor": "system", "change": "resurfaced",
-                    "note": "material evidence change vs prior human verdict "
-                            f"'{prev.human_status}'", "run_id": run_id,
-                })
+                existing.history.append(
+                    {
+                        "ts": ts,
+                        "actor": "system",
+                        "change": "resurfaced",
+                        "note": "material evidence change vs prior human verdict "
+                        f"'{prev.human_status}'",
+                        "run_id": run_id,
+                    }
+                )
             touched.append(existing)
         self._save(records)
         return touched
@@ -172,8 +185,11 @@ class FindingStore:
     @staticmethod
     def _run_entry(f: SecurityFinding, run_id: str, ts: str) -> dict:
         return {
-            "run_id": run_id, "ts": ts, "confidence": round(f.confidence, 3),
-            "status": f.status, "severity": f.severity,
+            "run_id": run_id,
+            "ts": ts,
+            "confidence": round(f.confidence, 3),
+            "status": f.status,
+            "severity": f.severity,
             "n_evidence": len(f.evidence),
             "has_supporting_taint": f.has_supporting_taint_path(),
         }
@@ -190,7 +206,11 @@ class FindingStore:
 
     # ------------------------------------------------------------- triage
     def set_status(
-        self, ident: str, new_status: str, actor: str = "human", note: str = "",
+        self,
+        ident: str,
+        new_status: str,
+        actor: str = "human",
+        note: str = "",
         confidence: Optional[float] = None,
     ) -> tuple[Optional[FindingRecord], str]:
         """Record a status change on one track. Returns (record, message).
@@ -211,8 +231,10 @@ class FindingStore:
         # The automated tracks obey the transition graph; human triage may move
         # a finding anywhere (it is the authority of last resort).
         if actor != "human" and not status_transition_allowed(current, new_status):
-            return rec, (f"transition {current} -> {new_status} not allowed for "
-                         f"actor '{actor}'")
+            return rec, (
+                f"transition {current} -> {new_status} not allowed for "
+                f"actor '{actor}'"
+            )
         setattr(f, ACTOR_FIELD[actor], new_status)
         if confidence is not None:
             f.confidence = max(0.0, min(float(confidence), 1.0))
@@ -220,15 +242,23 @@ class FindingStore:
         if actor == "human":
             rec.resurfaced = False  # a fresh human decision clears the re-surface flag
         rec.finding = f.to_dict()
-        rec.history.append({
-            "ts": _now_iso(), "actor": actor, "change": "status",
-            "field": ACTOR_FIELD[actor], "to": new_status, "note": note,
-            **({"confidence": f.confidence} if confidence is not None else {}),
-        })
+        rec.history.append(
+            {
+                "ts": _now_iso(),
+                "actor": actor,
+                "change": "status",
+                "field": ACTOR_FIELD[actor],
+                "to": new_status,
+                "note": note,
+                **({"confidence": f.confidence} if confidence is not None else {}),
+            }
+        )
         records[rec.fingerprint] = rec
         self._save(records)
-        return rec, (f"{rec.id}: {ACTOR_FIELD[actor]} -> {new_status} "
-                     f"(effective: {f.effective_status()})")
+        return rec, (
+            f"{rec.id}: {ACTOR_FIELD[actor]} -> {new_status} "
+            f"(effective: {f.effective_status()})"
+        )
 
     def add_note(self, ident: str, text: str) -> tuple[Optional[FindingRecord], str]:
         records = self._load()
@@ -281,12 +311,14 @@ class TaintStore:
         return out
 
     def _save(self, records: dict[str, dict]) -> None:
-        ordered = sorted(records.values(), key=lambda r: r.get("last_seen", ""),
-                         reverse=True)
+        ordered = sorted(
+            records.values(), key=lambda r: r.get("last_seen", ""), reverse=True
+        )
         _write_jsonl(self.path, ordered)
 
-    def upsert(self, findings: list[SecurityFinding], run_id: str = "",
-               ts: str = "") -> list[dict]:
+    def upsert(
+        self, findings: list[SecurityFinding], run_id: str = "", ts: str = ""
+    ) -> list[dict]:
         ts = ts or _now_iso()
         records = self._load()
         touched: list[dict] = []
@@ -305,9 +337,18 @@ class TaintStore:
                 }
                 existing = records.get(tid)
                 if existing is None:
-                    rec = {**snap, "first_seen": ts, "last_seen": ts,
-                           "history": [{"ts": ts, "completeness": tp.completeness,
-                                        "run_id": run_id}]}
+                    rec = {
+                        **snap,
+                        "first_seen": ts,
+                        "last_seen": ts,
+                        "history": [
+                            {
+                                "ts": ts,
+                                "completeness": tp.completeness,
+                                "run_id": run_id,
+                            }
+                        ],
+                    }
                     records[tid] = rec
                     touched.append(rec)
                 else:
@@ -315,17 +356,21 @@ class TaintStore:
                     existing.update(snap)
                     existing["last_seen"] = ts
                     if changed:
-                        existing.setdefault("history", []).append({
-                            "ts": ts, "completeness": tp.completeness,
-                            "run_id": run_id,
-                        })
+                        existing.setdefault("history", []).append(
+                            {
+                                "ts": ts,
+                                "completeness": tp.completeness,
+                                "run_id": run_id,
+                            }
+                        )
                     touched.append(existing)
         self._save(records)
         return touched
 
     def list(self) -> list[dict]:
-        return sorted(self._load().values(), key=lambda r: r.get("last_seen", ""),
-                      reverse=True)
+        return sorted(
+            self._load().values(), key=lambda r: r.get("last_seen", ""), reverse=True
+        )
 
 
 # =====================================================================rendering
@@ -344,26 +389,36 @@ def render_finding_list(records: list[FindingRecord]) -> str:
             f"{f.id}  [{f.severity:<8}] {eff:<14} c={f.confidence:.2f} "
             f"runs={n_runs}  {f.title[:48]}  @ {loc}{flag}"
         )
-    header = f"{len(records)} finding(s) — id / severity / effective-status / confidence:\n"
+    header = (
+        f"{len(records)} finding(s) — id / severity / effective-status / confidence:\n"
+    )
     return header + "\n".join(rows)
 
 
 def render_finding_detail(rec: FindingRecord) -> str:
     """Full detail for one finding: the finding + its history and notes."""
     f = rec.as_finding()
-    parts = [f.to_markdown(), "", "---",
-             f"First seen: {rec.first_seen}   Last seen: {rec.last_seen}   "
-             f"Runs: {len(rec.runs)}"]
+    parts = [
+        f.to_markdown(),
+        "",
+        "---",
+        f"First seen: {rec.first_seen}   Last seen: {rec.last_seen}   "
+        f"Runs: {len(rec.runs)}",
+    ]
     if rec.resurfaced:
-        parts.append("**⟲ Re-surfaced** — evidence changed materially since a "
-                     "prior human verdict; needs re-triage.")
+        parts.append(
+            "**⟲ Re-surfaced** — evidence changed materially since a "
+            "prior human verdict; needs re-triage."
+        )
     if rec.history:
         parts.append("\nStatus history:")
         for h in rec.history:
             note = f" — {h['note']}" if h.get("note") else ""
             fld = f" [{h['field']}]" if h.get("field") else ""
-            parts.append(f"- {h['ts']}  {h['actor']}: {h['change']}"
-                         f"{fld} → {h.get('to', '')}{note}")
+            parts.append(
+                f"- {h['ts']}  {h['actor']}: {h['change']}"
+                f"{fld} → {h.get('to', '')}{note}"
+            )
     if rec.notes:
         parts.append("\nReviewer notes:")
         for n in rec.notes:

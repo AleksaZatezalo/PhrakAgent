@@ -19,8 +19,13 @@ _MAX_PER_ECOSYSTEM = 100
 
 # advisory severity strings -> PHRAK severities
 _SEVERITY = {
-    "critical": "critical", "high": "high", "moderate": "medium",
-    "medium": "medium", "low": "low", "info": "info", "informational": "info",
+    "critical": "critical",
+    "high": "high",
+    "moderate": "medium",
+    "medium": "medium",
+    "low": "low",
+    "info": "info",
+    "informational": "info",
 }
 
 
@@ -29,29 +34,42 @@ def _severity(raw: object) -> str:
 
 
 def _dep_finding(
-    package: str, version: str, advisory_id: str, summary: str, severity: str,
-    fixed: str, manifest: str, tool: str, refs: list[str], cwe_text: object = "",
+    package: str,
+    version: str,
+    advisory_id: str,
+    summary: str,
+    severity: str,
+    fixed: str,
+    manifest: str,
+    tool: str,
+    refs: list[str],
+    cwe_text: object = "",
 ) -> SecurityFinding:
     ver = f" {version}" if version else ""
-    rec = f"Upgrade {package} to {fixed}." if fixed else \
-        f"Upgrade {package} to a non-vulnerable version (see advisory)."
+    rec = (
+        f"Upgrade {package} to {fixed}."
+        if fixed
+        else f"Upgrade {package} to a non-vulnerable version (see advisory)."
+    )
     return SecurityFinding(
         title=f"Vulnerable dependency: {package}{ver} ({advisory_id})",
         description=summary or f"{package}{ver} is affected by {advisory_id}.",
         category="vulnerable-dependency",
         severity=_severity(severity),
-        confidence=0.75,          # a version match against an advisory DB is factual
+        confidence=0.75,  # a version match against an advisory DB is factual
         status="new",
         cwe_ids=extract_cwe(cwe_text, summary, advisory_id),
         affected_symbols=[package],
         affected_files=[manifest] if manifest else [],
         references=[r for r in refs if r],
         recommendation=rec,
-        evidence=[FindingEvidence(
-            path=manifest,
-            reason=f"{package}{ver}: {advisory_id}",
-            evidence_type="analyzer_hit",
-        )],
+        evidence=[
+            FindingEvidence(
+                path=manifest,
+                reason=f"{package}{ver}: {advisory_id}",
+                evidence_type="analyzer_hit",
+            )
+        ],
         source_tools=[tool],
         source_agent="dependency_audit",
     ).ensure_identity()
@@ -69,11 +87,20 @@ def parse_pip_audit(data: object, manifest: str) -> list[SecurityFinding]:
         for v in dep.get("vulns", []) or []:
             vid = v.get("id", "") or (v.get("aliases", [""]) or [""])[0]
             fixed = ", ".join(v.get("fix_versions", []) or [])
-            out.append(_dep_finding(
-                name, version, vid, v.get("description", ""),
-                v.get("severity", ""), fixed, manifest, "pip-audit",
-                v.get("aliases", []) or [], v.get("description", ""),
-            ))
+            out.append(
+                _dep_finding(
+                    name,
+                    version,
+                    vid,
+                    v.get("description", ""),
+                    v.get("severity", ""),
+                    fixed,
+                    manifest,
+                    "pip-audit",
+                    v.get("aliases", []) or [],
+                    v.get("description", ""),
+                )
+            )
     return out[:_MAX_PER_ECOSYSTEM]
 
 
@@ -97,11 +124,20 @@ def parse_npm_audit(data: object, manifest: str) -> list[SecurityFinding]:
             fixed = f"{fa.get('name', name)}@{fa.get('version', '')}"
         elif fa is True:
             fixed = "a fixed version (`npm audit fix`)"
-        out.append(_dep_finding(
-            name, v.get("range", ""), title or f"GHSA/{vid or 'advisory'}",
-            title, severity, fixed, manifest, "npm-audit",
-            [url] if url else [], cwe,
-        ))
+        out.append(
+            _dep_finding(
+                name,
+                v.get("range", ""),
+                title or f"GHSA/{vid or 'advisory'}",
+                title,
+                severity,
+                fixed,
+                manifest,
+                "npm-audit",
+                [url] if url else [],
+                cwe,
+            )
+        )
     return out[:_MAX_PER_ECOSYSTEM]
 
 
@@ -142,10 +178,20 @@ def parse_govulncheck(text: str, manifest: str) -> list[SecurityFinding]:
         aff = (osv.get("affected") or [{}])[0]
         pkg = aff.get("package", {}).get("name", "")
         refs = [r.get("url", "") for r in osv.get("references", []) or []]
-        out.append(_dep_finding(
-            pkg or "go module", "", oid, summary, "", "", manifest,
-            "govulncheck", refs, summary,
-        ))
+        out.append(
+            _dep_finding(
+                pkg or "go module",
+                "",
+                oid,
+                summary,
+                "",
+                "",
+                manifest,
+                "govulncheck",
+                refs,
+                summary,
+            )
+        )
     return out[:_MAX_PER_ECOSYSTEM]
 
 
@@ -159,11 +205,20 @@ def parse_cargo_audit(data: object, manifest: str) -> list[SecurityFinding]:
         adv = item.get("advisory", {}) or {}
         pkg = item.get("package", {}) or {}
         patched = ", ".join((item.get("versions", {}) or {}).get("patched", []) or [])
-        out.append(_dep_finding(
-            pkg.get("name", ""), pkg.get("version", ""), adv.get("id", ""),
-            adv.get("title", "") or adv.get("description", ""), "", patched,
-            manifest, "cargo-audit", [adv.get("url", "")], adv.get("categories", ""),
-        ))
+        out.append(
+            _dep_finding(
+                pkg.get("name", ""),
+                pkg.get("version", ""),
+                adv.get("id", ""),
+                adv.get("title", "") or adv.get("description", ""),
+                "",
+                patched,
+                manifest,
+                "cargo-audit",
+                [adv.get("url", "")],
+                adv.get("categories", ""),
+            )
+        )
     return out[:_MAX_PER_ECOSYSTEM]
 
 
@@ -196,8 +251,7 @@ class DependencyAuditAdapter:
             candidates = [root]
         else:
             candidates = [
-                p for p in root.rglob("*")
-                if p.is_file() and not (set(p.parts) & skip)
+                p for p in root.rglob("*") if p.is_file() and not (set(p.parts) & skip)
             ]
         for p in candidates:
             nm = p.name
@@ -215,7 +269,8 @@ class DependencyAuditAdapter:
         manifests = self._manifests(path)
         if not manifests:
             return AnalyzerResult(
-                tool=self.name, summary="No dependency manifests found.",
+                tool=self.name,
+                summary="No dependency manifests found.",
             )
         root = workspace()
         findings: list[SecurityFinding] = []
@@ -227,29 +282,37 @@ class DependencyAuditAdapter:
                 notes.append(note)
         summary = (
             f"{len(findings)} vulnerable-dependency finding(s)."
-            if findings else "No known-vulnerable dependencies found."
+            if findings
+            else "No known-vulnerable dependencies found."
         )
         if notes:
             summary += "\n" + "\n".join(f"- {n}" for n in notes)
         return AnalyzerResult(
-            tool=self.name, findings=findings, summary=summary,
+            tool=self.name,
+            findings=findings,
+            summary=summary,
             available=self.is_available(),
         )
 
     def _audit_ecosystem(self, eco: str, files: list[Path], root: Path):
-        rel = lambda p: str(p.resolve().relative_to(root)) if root in p.resolve().parents \
-            or p.resolve() == root else str(p)  # noqa: E731
+        rel = lambda p: (
+            str(p.resolve().relative_to(root))
+            if root in p.resolve().parents or p.resolve() == root
+            else str(p)
+        )  # noqa: E731
         if eco == "python":
             return self._audit_python(files, rel)
         if eco == "node":
             return self._audit_json_cmd(
-                "npm", ["npm", "audit", "--json"], files[0], rel, parse_npm_audit)
+                "npm", ["npm", "audit", "--json"], files[0], rel, parse_npm_audit
+            )
         if eco == "go":
             return self._audit_go(files[0], rel)
         if eco == "rust":
             manifest = next((f for f in files if f.name == "Cargo.toml"), files[0])
             return self._audit_json_cmd(
-                "cargo", ["cargo", "audit", "--json"], manifest, rel, parse_cargo_audit)
+                "cargo", ["cargo", "audit", "--json"], manifest, rel, parse_cargo_audit
+            )
         return [], None
 
     def _audit_python(self, files, rel):
@@ -283,8 +346,11 @@ class DependencyAuditAdapter:
     def _audit_go(self, manifest, rel):
         if not shutil.which("govulncheck"):
             return [], "govulncheck not installed — Go deps not audited."
-        res = run_cli(["govulncheck", "-json", "./..."],
-                      timeout=AUDIT_TIMEOUT, cwd=manifest.parent)
+        res = run_cli(
+            ["govulncheck", "-json", "./..."],
+            timeout=AUDIT_TIMEOUT,
+            cwd=manifest.parent,
+        )
         if not res.stdout.strip():
             return [], f"govulncheck produced no output: {res.output[:200]}"
         return parse_govulncheck(res.stdout, rel(manifest)), None

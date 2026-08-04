@@ -27,7 +27,7 @@ def _call(**over):
         severity="high",
         description="user id concatenated into SQL",
         file="vuln_app.py",
-        line=13,               # conftest vuln_app.py has the SQLi around here
+        line=13,  # conftest vuln_app.py has the SQLi around here
         recommendation="use parameterized queries",
         disproof="the query uses a bound parameter",
         cwe="CWE-89",
@@ -90,12 +90,12 @@ def test_report_appended_to_agent_output(runtime, monkeypatch):
         def skills_block(self, q):
             return ""
 
-    agent = Agent.__new__(Agent)          # bypass tool wiring
+    agent = Agent.__new__(Agent)  # bypass tool wiring
     agent.spec = spec
     agent.skills = _Skills()
 
     rt.begin_findings()
-    _call()                                # record one grounded finding
+    _call()  # record one grounded finding
     out = agent._append_structured_findings("original report body")
     assert "original report body" in out
     assert "## Structured Findings (validated)" in out

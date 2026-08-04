@@ -73,7 +73,7 @@ class ChatSession:
         self.last_answer = ""
         self.verbose = False
         self.tokens = {"input": 0, "output": 0, "turns": 0}
-        self._model_name = None      # set to override the base model
+        self._model_name = None  # set to override the base model
         self._thread_seq = 0
         self._build()
 
@@ -126,10 +126,15 @@ class ChatSession:
     def cost_summary(self) -> str:
         t = self.tokens
         provider = self.app.config.llm.provider
-        charge = ("$0.00 (local Ollama — no API charge)"
-                  if provider == "ollama" else "provider-dependent")
-        return (f"tokens this session — input: {t['input']}, output: {t['output']}, "
-                f"turns: {t['turns']}\nestimated spend: {charge}")
+        charge = (
+            "$0.00 (local Ollama — no API charge)"
+            if provider == "ollama"
+            else "provider-dependent"
+        )
+        return (
+            f"tokens this session — input: {t['input']}, output: {t['output']}, "
+            f"turns: {t['turns']}\nestimated spend: {charge}"
+        )
 
     def _account(self, msg) -> None:
         """Best-effort token accounting from provider metadata."""

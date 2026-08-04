@@ -16,10 +16,18 @@ _ENABLED = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
 
 # Raw ANSI codes, kept so colors can be toggled at runtime (--no-color).
 _CODES = {
-    "RESET": "\033[0m", "BOLD": "\033[1m", "DIM": "\033[2m",
-    "GREEN": "\033[32m", "BGREEN": "\033[92m", "CYAN": "\033[36m",
-    "BCYAN": "\033[96m", "RED": "\033[91m", "GREY": "\033[90m",
-    "WHITE": "\033[97m", "MAGENTA": "\033[95m", "YELLOW": "\033[93m",
+    "RESET": "\033[0m",
+    "BOLD": "\033[1m",
+    "DIM": "\033[2m",
+    "GREEN": "\033[32m",
+    "BGREEN": "\033[92m",
+    "CYAN": "\033[36m",
+    "BCYAN": "\033[96m",
+    "RED": "\033[91m",
+    "GREY": "\033[90m",
+    "WHITE": "\033[97m",
+    "MAGENTA": "\033[95m",
+    "YELLOW": "\033[93m",
 }
 
 
@@ -39,8 +47,9 @@ def _refresh() -> None:
 
 
 # Initialise the public color constants (RESET, GREEN, BGREEN, ...).
-RESET = BOLD = DIM = GREEN = BGREEN = CYAN = BCYAN = RED = GREY = WHITE = \
-    MAGENTA = YELLOW = ""
+RESET = BOLD = DIM = GREEN = BGREEN = CYAN = BCYAN = RED = GREY = WHITE = MAGENTA = (
+    YELLOW
+) = ""
 _refresh()
 
 
@@ -49,6 +58,7 @@ def set_color(enabled: bool) -> None:
     global _ENABLED
     _ENABLED = bool(enabled)
     _refresh()
+
 
 # ANSI-Shadow "PHRAK AGENT"
 _ART = r"""

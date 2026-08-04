@@ -114,6 +114,4 @@ class VerbalizedToolCallMiddleware(AgentMiddleware):
         )
         if not calls:
             return response
-        return AIMessage(
-            content=cleaned, tool_calls=calls, id=getattr(msg, "id", None)
-        )
+        return AIMessage(content=cleaned, tool_calls=calls, id=getattr(msg, "id", None))

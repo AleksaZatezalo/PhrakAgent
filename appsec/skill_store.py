@@ -82,16 +82,15 @@ class SkillStore:
         return "## Applicable skills (reusable procedures)\n" + "\n\n".join(skills)
 
     # --------------------------------------------------------------- write
-    def write_skill(self, name: str, when_to_use: str, steps: list[str],
-                    scope: str = "workspace") -> str:
+    def write_skill(
+        self, name: str, when_to_use: str, steps: list[str], scope: str = "workspace"
+    ) -> str:
         name = _slug(name)
         body = (
             f"# {name}\n\n"
             f"**When to use:** {when_to_use}\n\n"
             f"_Created {_now()}_\n\n"
-            "## Steps\n"
-            + "\n".join(f"{i}. {s}" for i, s in enumerate(steps, 1))
-            + "\n"
+            "## Steps\n" + "\n".join(f"{i}. {s}" for i, s in enumerate(steps, 1)) + "\n"
         )
         path = self._dir_for(scope) / f"{name}.md"
         path.write_text(body)

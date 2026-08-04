@@ -32,19 +32,22 @@ def test_normalize_url_adds_scheme():
     assert common.normalize_url("https://x") == "https://x"
 
 
-@pytest.mark.parametrize("host,expected", [
-    ("127.0.0.1", True),
-    ("localhost", True),
-    ("::1", True),
-    ("[::1]", True),
-    ("2130706433", True),          # decimal 127.0.0.1
-    ("0x7f000001", True),          # hex 127.0.0.1
-    ("::ffff:127.0.0.1", True),    # IPv4-mapped loopback
-    ("8.8.8.8", False),
-    ("169.254.169.254", False),    # cloud metadata — not loopback
-    ("0x08080808", False),         # hex 8.8.8.8
-    ("2851995648", False),         # decimal 169.254.0.0
-])
+@pytest.mark.parametrize(
+    "host,expected",
+    [
+        ("127.0.0.1", True),
+        ("localhost", True),
+        ("::1", True),
+        ("[::1]", True),
+        ("2130706433", True),  # decimal 127.0.0.1
+        ("0x7f000001", True),  # hex 127.0.0.1
+        ("::ffff:127.0.0.1", True),  # IPv4-mapped loopback
+        ("8.8.8.8", False),
+        ("169.254.169.254", False),  # cloud metadata — not loopback
+        ("0x08080808", False),  # hex 8.8.8.8
+        ("2851995648", False),  # decimal 169.254.0.0
+    ],
+)
 def test_host_is_loopback_encodings(host, expected):
     assert common.host_is_loopback(host) is expected
 

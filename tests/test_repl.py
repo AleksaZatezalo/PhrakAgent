@@ -30,7 +30,7 @@ def test_command_names_includes_agents_and_builtins():
     assert "ask" in names and "config" in names
     assert "code_review" in names and "threat_model" in names
     assert "clean" not in names  # removed command
-    assert "yolo" not in names   # removed command
+    assert "yolo" not in names  # removed command
     assert "skill" not in names  # removed chat command (phrak skill still exists)
     assert len(names) == len(set(names))  # de-duped
 

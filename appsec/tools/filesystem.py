@@ -58,8 +58,18 @@ def search_code(pattern: str, path: str = ".") -> str:
     rg_globs = [g for d in excludes for g in ("-g", f"!{d}")]
     grep_excludes = [f"--exclude-dir={d}" for d in excludes]
     candidates = [
-        ["rg", "-n", "--no-heading", "-S", "--hidden", *rg_globs,
-         "--max-count", "200", pattern, str(p)],
+        [
+            "rg",
+            "-n",
+            "--no-heading",
+            "-S",
+            "--hidden",
+            *rg_globs,
+            "--max-count",
+            "200",
+            pattern,
+            str(p),
+        ],
         ["grep", "-rniE", "--max-count=200", *grep_excludes, pattern, str(p)],
     ]
     last = len(candidates) - 1
