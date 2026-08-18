@@ -1,0 +1,64 @@
+rules:
+  - id: js-taint-sqli
+    mode: taint
+    languages: [javascript, typescript]
+    message: SQL injection — untrusted input reaches query() via string concatenation
+    severity: ERROR
+    metadata:
+      cwe: "CWE-89: SQL injection"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      category: sql-injection
+    pattern-sources:
+      - pattern: req.query.$X
+      - pattern: req.body.$X
+      - pattern: req.params.$X
+      - pattern: req.headers.$X
+      - pattern: req.cookies.$X
+    pattern-sinks:
+      - pattern: $C.query($Q, ...)
+      - pattern: $C.execute($Q, ...)
+      - pattern: $C.raw($Q, ...)
+
+  - id: js-taint-command-injection
+    mode: taint
+    languages: [javascript, typescript]
+    message: OS command injection — untrusted input reaches child_process
+    severity: ERROR
+    metadata:
+      cwe: "CWE-78: OS command injection"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      category: command-injection
+    pattern-sources:
+      - pattern: req.query.$X
+      - pattern: req.body.$X
+      - pattern: req.params.$X
+    pattern-sinks:
+      - pattern: child_process.exec($C, ...)
+      - pattern: child_process.execSync($C, ...)
+      - pattern: cp.exec($C, ...)
+      - pattern: exec($C, ...)
+
+  - id: js-taint-ssrf
+    mode: taint
+    languages: [javascript, typescript]
+    message: SSRF — user-controlled URL reaches an outbound HTTP client
+    severity: ERROR
+    metadata:
+      cwe: "CWE-918: Server-side request forgery"
+      owasp: "A10:2021 - SSRF"
+      confidence: MEDIUM
+      category: ssrf
+    pattern-sources:
+      - pattern: req.query.$X
+      - pattern: req.body.$X
+      - pattern: req.params.$X
+    pattern-sinks:
+      - pattern: fetch($U, ...)
+      - pattern: axios.get($U, ...)
+      - pattern: axios.post($U, ...)
+      - pattern: axios($U, ...)
+      - pattern: http.get($U, ...)
+      - pattern: https.get($U, ...)
+      - pattern: request($U, ...)

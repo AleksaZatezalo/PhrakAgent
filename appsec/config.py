@@ -196,6 +196,24 @@ class Config:
     keep_reports: int = 50  # keep newest N reports; older auto-deleted.
     # 0 = keep everything
     enable_git_clone: bool = False  # expose the guarded git_clone tool to agents
+    # Phase 10: opt-in `verify` agent that runs one-shot PoCs against a
+    # confirmed finding inside a throwaway container (Docker/Podman). OFF by
+    # default — running attacker payloads (even against your own code) is a
+    # policy decision, not a technical one.
+    enable_verify: bool = False
+    # Container runtime for the verify agent. auto = docker if present, else podman.
+    verify_runtime: str = "auto"
+    # Base image PoCs execute in. Kept slim; must have python3 + curl.
+    verify_image: str = "python:3.12-slim"
+    # Per-PoC wall-clock cap. A verify PoC must be short.
+    verify_timeout_s: int = 30
+    # Whether the sandbox has host network. `none` is the strong default —
+    # PoCs can spin up the target on localhost inside the sandbox and hit it
+    # from within, or fail. `bridge` only if you know what you're doing.
+    verify_network: str = "none"
+    # Memory / process caps for the sandbox.
+    verify_memory_mb: int = 512
+    verify_pids: int = 128
     orchestrator: OrchestratorConfig = field(default_factory=OrchestratorConfig)
     analyzers: AnalyzersConfig = field(default_factory=AnalyzersConfig)
     # Per-agent LLM overrides, e.g. {"threat_model": {"model": "glm-4.7-flash"}}.
@@ -234,6 +252,13 @@ class Config:
             max_rounds=raw.get("max_rounds", 4),
             keep_reports=raw.get("keep_reports", 50),
             enable_git_clone=bool(raw.get("enable_git_clone", False)),
+            enable_verify=bool(raw.get("enable_verify", False)),
+            verify_runtime=str(raw.get("verify_runtime", "auto")),
+            verify_image=str(raw.get("verify_image", "python:3.12-slim")),
+            verify_timeout_s=int(raw.get("verify_timeout_s", 30)),
+            verify_network=str(raw.get("verify_network", "none")),
+            verify_memory_mb=int(raw.get("verify_memory_mb", 512)),
+            verify_pids=int(raw.get("verify_pids", 128)),
             agent_models=dict(raw.get("agent_models") or {}),
         )
 
@@ -325,6 +350,13 @@ class Config:
             "max_rounds": self.max_rounds,
             "keep_reports": self.keep_reports,
             "enable_git_clone": self.enable_git_clone,
+            "enable_verify": self.enable_verify,
+            "verify_runtime": self.verify_runtime,
+            "verify_image": self.verify_image,
+            "verify_timeout_s": self.verify_timeout_s,
+            "verify_network": self.verify_network,
+            "verify_memory_mb": self.verify_memory_mb,
+            "verify_pids": self.verify_pids,
             "agent_models": self.agent_models,
         }
 

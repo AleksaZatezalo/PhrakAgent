@@ -10,10 +10,11 @@ from ..base_agent import AgentSpec, register_agent
 from ..tools.analysis import analysis_tools
 from ..tools.analyzer_tools import dependency_audit
 from ..tools.filesystem import read_only_tools
+from ..tools.rag_tool import rag_search_tools
 
 
 def _tools() -> list:
-    return read_only_tools() + analysis_tools() + [dependency_audit]
+    return read_only_tools() + analysis_tools() + rag_search_tools() + [dependency_audit]
 
 
 SYSTEM_PROMPT = """You are a threat-modeling expert. Produce a rigorous,

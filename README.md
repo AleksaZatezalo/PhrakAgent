@@ -26,9 +26,10 @@ Everything a run produces stays on your machine, inside a per-workspace
 
 | Agent | Role |
 |-------|------|
-| `code_review` | Finds vulnerabilities in source (OWASP/CWE) with `file:line` findings, exploitability reasoning, and fixes. Uses **Opengrep** (fast pattern-based leads across many languages) + secret scanning as leads, then verifies each in source, and records validated structured findings. |
+| `code_review` | Finds vulnerabilities in source (OWASP/CWE) with `file:line` findings, exploitability reasoning, and fixes. Uses **Opengrep in taint mode** (source→sink dataflow traces for SQLi, cmd-injection, path traversal, SSRF, deserialization) as its confirmed-lead source, **Opengrep pattern scan** + **secret scanning** as unconfirmed leads, then verifies each in source, and records validated structured findings. Also has **semantic `rag_search`** for finding sibling instances of a bug pattern. |
 | `threat_model` | STRIDE/PASTA threat model: components, trust boundaries, data flows, per-threat table, and prioritized attack paths, tied to real components in the code. |
 | `test_case` | Reads the source (and the `code_review` findings + `threat_model` threats fed forward) and turns them into a **prioritized list of concrete security test cases** — each with an ID, target, steps, and an expected result — for you to work through manually. **PHRAK does not run the tests**; it produces the checklist. |
+| `verify` *(opt-in)* | Takes each confirmed data-flow finding and runs a minimal PoC **inside a locked-down container** to demonstrate exploitability: `--network none`, read-only rootfs, non-root, dropped caps, memory/pids capped, wall-clock timeout. When a PoC lands, the finding's runtime status is promoted. Off by default (`enable_verify: false`) — running attacker payloads is a policy decision. |
 
 The **orchestrator** plans a dependency graph of agent tasks, runs independent
 ones in parallel, feeds each task's findings forward, and synthesizes one

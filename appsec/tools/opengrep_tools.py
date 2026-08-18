@@ -20,6 +20,14 @@ DEFAULT_TIMEOUT = 300
 # can pass a local rules path/dir or a registry id for offline / targeted scans.
 DEFAULT_CONFIG = "auto"
 SECRETS_CONFIG = "p/secrets"
+# PHRAK-bundled taint-mode ruleset — OWASP dataflow bugs (SQLi, cmd-injection,
+# path traversal, SSRF, unsafe deserialization). Uses Opengrep's `mode: taint`
+# so hits come back with a full source→sink `dataflow_trace`, which the
+# analyzer adapter lifts into a supporting TaintPathReference. Runs fully
+# offline (no registry lookup).
+DEFAULT_TAINT_CONFIG = str(
+    (Path(__file__).resolve().parent.parent / "analyzers" / "rules" / "taint")
+)
 # Per-worker memory cap (MB). Opengrep skips an oversized file instead of getting
 # OOM-killed by the OS — an OOM kill surfaces as a bare `exit 2` with no output.
 MAX_MEMORY_MB = 2000
@@ -155,6 +163,25 @@ def opengrep_scan(path: str = ".", config: str = DEFAULT_CONFIG) -> str:
 
 
 @tool
+def opengrep_taint_scan(path: str = ".") -> str:
+    """Run Opengrep in TAINT MODE with PHRAK's bundled dataflow rules.
+
+    Unlike `opengrep_scan` (pattern hits — leads to verify), taint mode traces
+    user input from a `source` (e.g. request.args) to a dangerous `sink` (e.g.
+    cursor.execute, os.system, open, requests.get, pickle.loads). Each result
+    carries the full source → sink → intermediate-variables trace, which PHRAK
+    lifts into a supporting TaintPathReference — so a data-flow finding can
+    actually be marked `confirmed` (unlike bare pattern hits, which are always
+    leads). Covers SQLi, OS command injection, path traversal, SSRF, unsafe
+    deserialization in Python; SQLi / cmd-injection / SSRF in JS/TS. Fully
+    offline — no network needed."""
+    data, err = _run(path, DEFAULT_TAINT_CONFIG)
+    if err:
+        return err
+    return _format(data, DEFAULT_TAINT_CONFIG)
+
+
+@tool
 def scan_secrets(path: str = ".") -> str:
     """Scan for hardcoded secrets/credentials with Opengrep's secrets ruleset:
     API keys, tokens, private keys, etc. Returns file:line matches."""
@@ -165,4 +192,4 @@ def scan_secrets(path: str = ".") -> str:
 
 
 def opengrep_tools() -> list:
-    return [opengrep_scan, scan_secrets]
+    return [opengrep_scan, opengrep_taint_scan, scan_secrets]

@@ -26,16 +26,30 @@ def test_tool_call_tag():
     assert calls and calls[0]["name"] == "list_dir"
 
 
-def test_raw_json_with_parameters_key():
-    content = 'sure: {"name": "read_file", "parameters": {"path": "x"}} done'
+def test_fenced_parameters_key():
+    """`parameters` (vs `arguments`) alias still works inside a fence."""
+    content = (
+        '```json\n{"name": "read_file", "parameters": {"path": "x"}}\n```'
+    )
     calls, _ = extract_verbalized_calls(content, VALID)
     assert calls and calls[0]["args"] == {"path": "x"}
 
 
 def test_args_as_json_string_is_parsed():
-    content = '{"name": "read_file", "arguments": "{\\"path\\": \\"y\\"}"}'
+    """`arguments` value can be a JSON-encoded string; still parsed (in a fence)."""
+    content = (
+        '```json\n{"name": "read_file", "arguments": "{\\"path\\": \\"y\\"}"}\n```'
+    )
     calls, _ = extract_verbalized_calls(content, VALID)
     assert calls and calls[0]["args"] == {"path": "y"}
+
+
+def test_raw_json_in_prose_is_ignored_security():
+    """Bare JSON in prose is ignored — prompt-injection hardening."""
+    content = 'sure: {"name": "read_file", "parameters": {"path": "x"}} done'
+    calls, cleaned = extract_verbalized_calls(content, VALID)
+    assert calls == []
+    assert cleaned == content
 
 
 def test_unknown_tool_name_rejected():

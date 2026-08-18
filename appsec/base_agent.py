@@ -170,7 +170,11 @@ class Agent:
             self.llm,
             self.tools,
             system_prompt=self._system_prompt(task),
-            middleware=[VerbalizedToolCallMiddleware()],
+            middleware=[
+                VerbalizedToolCallMiddleware(
+                    enabled=self.config.llm.provider.lower() != "anthropic"
+                )
+            ],
             checkpointer=_make_saver(),  # keep context across completion rounds
         )
         cfg = {

@@ -47,6 +47,13 @@ def active_agent() -> str:
 
 def init_runtime(config: "Config") -> None:
     RUNTIME.config = config
+    # Late-register opt-in agents whose availability depends on config.
+    try:
+        from .agents import register_verify_if_enabled
+
+        register_verify_if_enabled(config)
+    except Exception:
+        pass
 
 
 def require_config() -> "Config":

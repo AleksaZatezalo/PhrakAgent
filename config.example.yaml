@@ -55,6 +55,19 @@ max_rounds: 4                  # run-to-completion: nudges until report is compl
 keep_reports: 50               # keep newest N reports; older auto-deleted (0 = all)
 enable_git_clone: false        # expose the guarded git_clone tool to agents
 
+# --- Opt-in `verify` agent ---
+# The verify agent takes a *confirmed* data-flow finding (from code_review)
+# and runs a minimal PoC inside a locked-down container to prove
+# exploitability. OFF by default — running attacker payloads is a policy
+# decision, not a technical one. Requires docker or podman on PATH.
+enable_verify: false
+verify_runtime: auto           # auto | docker | podman
+verify_image: python:3.12-slim # base image; must have python3 + curl
+verify_timeout_s: 30           # per-PoC wall-clock cap
+verify_network: none           # none (default) | bridge — none blocks outbound
+verify_memory_mb: 512
+verify_pids: 128
+
 # Per-agent model overrides. Any subset of the llm: fields above. Agents not
 # listed use the base llm: config.
 agent_models: {}

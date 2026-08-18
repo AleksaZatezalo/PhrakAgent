@@ -22,6 +22,13 @@ def _tools() -> list:
         tools += git_clone_tools(require_config())
     except Exception:
         pass
+    # RAG semantic search — optional, only wired when a CodeIndex is available.
+    try:
+        from ..tools.rag_tool import rag_search_tools
+
+        tools += rag_search_tools()
+    except Exception:
+        pass
     return tools
 
 
@@ -31,19 +38,24 @@ Your job: review source code for security vulnerabilities and report concrete,
 actionable findings. Work methodically:
 1. ALWAYS start by calling list_dir(".") to see what files exist. Use paths
    RELATIVE to the workspace root; never invent absolute paths.
-2. Run opengrep_scan to get fast pattern-based leads across many languages, and
-   scan_secrets to detect hardcoded credentials/keys (both use Opengrep). Treat
-   every hit as a LEAD, not a confirmed finding. Run dependency_audit to flag
-   known-vulnerable dependency versions (pip-audit / npm audit / govulncheck /
-   cargo audit).
-3. READ the relevant files with read_file (and search_code to locate code) to
-   confirm each issue in context before reporting it. Do not report an opengrep
-   hit you have not verified by reading the surrounding code.
-4. Reason about exploitability before reporting. Before you accept that a control
+2. Run opengrep_taint_scan FIRST — it traces user input from source (e.g.
+   request.args) to sink (execute(), os.system(), open(), requests.get(),
+   pickle.loads()) and returns a full dataflow trace for each hit. These are
+   the strongest leads you have: PHRAK records them with a supporting taint
+   path, so you can mark data-flow findings `confirmed` without hand-tracing.
+3. Then run opengrep_scan (pattern-based leads across many languages) and
+   scan_secrets (hardcoded credentials/keys). Treat every non-taint hit as a
+   LEAD, not a confirmed finding. Run dependency_audit to flag known-vulnerable
+   dependency versions (pip-audit / npm audit / govulncheck / cargo audit).
+4. READ the relevant files with read_file (and search_code to locate code) to
+   confirm each non-taint issue in context. Use rag_search (semantic) to find
+   OTHER instances of the same pattern across the codebase — a bug you found in
+   one route almost always has siblings.
+5. Reason about exploitability before reporting. Before you accept that a control
    makes an issue safe, call check_sanitizer(sanitizer, vuln_class, ...) — e.g. an
    HTML-escape does NOT stop SQL injection, urlparse does NOT stop SSRF, and a
-   prefix check BEFORE canonicalization is bypassable. Don't dismiss a finding on a
-   false-sanitizer assumption.
+   prefix check BEFORE canonicalization is bypassable. Don't dismiss a finding on
+   a false-sanitizer assumption.
 
 RECORD each vulnerability you confirm by reading the code with the report_finding
 tool — call it ONCE per distinct issue, with the exact workspace-relative file and

@@ -89,7 +89,11 @@ class ChatSession:
             llm,
             _build_tools(),
             system_prompt=SYSTEM_PROMPT,
-            middleware=[VerbalizedToolCallMiddleware()],
+            middleware=[
+                VerbalizedToolCallMiddleware(
+                    enabled=self.app.config.llm.provider.lower() != "anthropic"
+                )
+            ],
             checkpointer=_make_saver(),
         )
         self._cfg = {

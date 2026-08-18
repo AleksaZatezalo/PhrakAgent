@@ -100,7 +100,7 @@ Rules:
 - For a general "assess / review / secure this app" request, produce a FULL
   assessment: a code_review task and a threat_model task (independent — same
   parallel_group), then a test_case task that depends on BOTH and turns their
-  findings into a prioritized security test plan.
+  findings into a prioritized security test plan.{verify_rule}
 - Put independent tasks that can run at the same time in the same
   "parallel_group" (a short label); leave it empty for strictly-ordered tasks.
 - Only use agents from the list above; 2-6 tasks total. Each "task" is a concrete
@@ -112,6 +112,17 @@ Return ONLY JSON:
 
 USER REQUEST: {request}
 """
+
+# Inserted into _DAG_PLANNER_PROMPT when the opt-in verify agent is registered.
+# Kept as a separate string so unavailable-agent runs never leak guidance
+# telling the LLM to schedule a task the runner can't execute.
+_VERIFY_RULE = """
+- When a `verify` agent is available AND the request is a full assessment,
+  ALSO add a verify task that depends on code_review — its job is to take
+  each confirmed data-flow finding and attempt a sandboxed PoC to promote it
+  from static-only to runtime-confirmed. Place verify AFTER code_review and
+  BEFORE (or parallel to) test_case; verify's outputs are context for
+  test_case, not the other way round."""
 
 _ROUTER_PROMPT = """Choose the SINGLE best agent to handle the user's request.
 
@@ -321,8 +332,15 @@ class Orchestrator:
     # --------------------------------------------------------- DAG planning
     def plan_dag(self, request: str) -> list[Task]:
         """Plan a dependency graph of tasks. Falls back to a linear DAG."""
+        # Only inject the verify-agent scheduling rule when it's actually
+        # available — otherwise the planner would confidently emit a task
+        # that plan_dag would then drop and the run would proceed without
+        # the verification step the user thought they configured.
+        verify_rule = _VERIFY_RULE if "verify" in self.registry.names() else ""
         prompt = _DAG_PLANNER_PROMPT.format(
-            catalog=self.registry.catalog(), request=request
+            catalog=self.registry.catalog(),
+            request=request,
+            verify_rule=verify_rule,
         )
         data = None
         try:

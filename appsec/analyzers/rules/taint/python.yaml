@@ -1,0 +1,134 @@
+rules:
+  - id: py-taint-sqli
+    mode: taint
+    languages: [python]
+    message: SQL injection — user input reaches a DB execute() without parameterization
+    severity: ERROR
+    metadata:
+      cwe: "CWE-89: SQL injection"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      category: sql-injection
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json[...]
+      - pattern: request.values.get(...)
+      - pattern: request.cookies.get(...)
+      - pattern: request.headers.get(...)
+    pattern-sinks:
+      - pattern: $C.execute($Q)
+      - pattern: $C.executemany($Q, ...)
+      - pattern: $C.executescript($Q)
+    pattern-sanitizers:
+      - pattern: int(...)
+      - pattern: sqlalchemy.text($X).bindparams(...)
+
+  - id: py-taint-command-injection
+    mode: taint
+    languages: [python]
+    message: OS command injection — untrusted input reaches shell execution
+    severity: ERROR
+    metadata:
+      cwe: "CWE-78: OS command injection"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      category: command-injection
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json[...]
+      - pattern: request.cookies.get(...)
+      - pattern: sys.argv[...]
+      - pattern: os.environ.get(...)
+      - pattern: os.environ[...]
+    pattern-sinks:
+      - pattern: os.system(...)
+      - pattern: os.popen(...)
+      - patterns:
+          - pattern: subprocess.$F(..., shell=True, ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(run|call|check_call|check_output|Popen)$
+      - pattern: subprocess.getoutput(...)
+      - pattern: subprocess.getstatusoutput(...)
+      - pattern: commands.getoutput(...)
+
+  - id: py-taint-path-traversal
+    mode: taint
+    languages: [python]
+    message: Path traversal — user input reaches a file open() without canonicalization
+    severity: ERROR
+    metadata:
+      cwe: "CWE-22: Path traversal"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: MEDIUM
+      category: path-traversal
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json[...]
+    pattern-sinks:
+      - pattern: open($P, ...)
+      - pattern: io.open($P, ...)
+      - pattern: pathlib.Path($P).read_text(...)
+      - pattern: pathlib.Path($P).open(...)
+    pattern-sanitizers:
+      - pattern: werkzeug.utils.secure_filename(...)
+      - pattern: os.path.basename(...)
+
+  - id: py-taint-ssrf
+    mode: taint
+    languages: [python]
+    message: SSRF — user-controlled URL reaches an outbound HTTP client
+    severity: ERROR
+    metadata:
+      cwe: "CWE-918: Server-side request forgery"
+      owasp: "A10:2021 - SSRF"
+      confidence: MEDIUM
+      category: ssrf
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.json[...]
+    pattern-sinks:
+      - pattern: requests.get($U, ...)
+      - pattern: requests.post($U, ...)
+      - pattern: requests.request(..., $U, ...)
+      - pattern: urllib.request.urlopen($U, ...)
+      - pattern: urllib.request.urlretrieve($U, ...)
+      - pattern: httpx.get($U, ...)
+      - pattern: httpx.post($U, ...)
+      - pattern: httpx.Client(...).get($U, ...)
+      - pattern: aiohttp.ClientSession(...).get($U, ...)
+
+  - id: py-taint-deserialization
+    mode: taint
+    languages: [python]
+    message: Unsafe deserialization — untrusted input reaches pickle/yaml.load
+    severity: ERROR
+    metadata:
+      cwe: "CWE-502: Deserialization of untrusted data"
+      owasp: "A08:2021 - Software and Data Integrity Failures"
+      confidence: HIGH
+      category: deserialization
+    pattern-sources:
+      - pattern: request.data
+      - pattern: request.get_data(...)
+      - pattern: request.form.get(...)
+      - pattern: request.cookies.get(...)
+      - pattern: request.headers.get(...)
+    pattern-sinks:
+      - pattern: pickle.loads(...)
+      - pattern: cPickle.loads(...)
+      - pattern: yaml.load(...)
+      - pattern: yaml.load($X)
+      - pattern: yaml.unsafe_load(...)
+      - pattern: dill.loads(...)
