@@ -11,7 +11,24 @@ from .banner import CYAN, GREEN, GREY, RESET
 
 def command_names(app) -> list[str]:
     """All slash-command names available in chat, including dynamic agents."""
-    names = ["help", "agents", "ask", "run", "route", "clone", "config", "quit"]
+    names = [
+        "help",
+        "agents",
+        "ask",
+        "run",
+        "route",
+        "findings",
+        "finding",
+        "triage",
+        "note",
+        "clone",
+        "config",
+        "clear",
+        "model",
+        "cost",
+        "verbose",
+        "quit",
+    ]
     names += list(app.registry.names())
     # de-dupe while preserving order
     seen: dict[str, None] = {}
@@ -107,6 +124,24 @@ def chat_help(app) -> None:
             + [("/agents [--verbose]", "list agents (and their tools)")],
         ),
         (
+            "findings",
+            [
+                ("/findings [filters]", "list recorded findings across all runs"),
+                ("/finding <id>", "one finding in full: evidence, history, notes"),
+                ("/triage <id> <status>", "record your verdict (add a note after it)"),
+                ("/note <id> <text>", "attach a reviewer note"),
+            ],
+        ),
+        (
+            "session",
+            [
+                ("/clear", "forget the conversation so far"),
+                ("/model [name]", "show or switch the chat model"),
+                ("/cost", "tokens and estimated spend this session"),
+                ("/verbose", "toggle full tool output"),
+            ],
+        ),
+        (
             "system",
             [
                 ("/clone <url> [dest] [--index]", "shallow-clone a repo to analyze"),
@@ -114,6 +149,7 @@ def chat_help(app) -> None:
                 ("/help", "show this list"),
                 ("/quit", "exit PHRAK"),
                 ("<text>", "just chat — PHRAK reads code and answers, keeping context"),
+                ("@path/to/file", "inline a workspace file into your message"),
             ],
         ),
     ]

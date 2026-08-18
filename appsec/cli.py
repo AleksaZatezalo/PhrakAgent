@@ -225,7 +225,8 @@ def cmd_chat(args) -> int:
     )
     print(
         f"  type {CYAN}/help{RESET} for commands, {CYAN}Tab{RESET} to "
-        f"autocomplete, {CYAN}↑/↓{RESET} to filter history. "
+        f"autocomplete, {CYAN}↑/↓{RESET} to filter history, "
+        f"{CYAN}@file{RESET} to attach code. "
         f"{GREY}Or just type to chat.{RESET}\n"
     )
     while True:
@@ -327,6 +328,44 @@ def cmd_chat(args) -> int:
                 render_markdown(result["report"])
                 _land_report(app, result["report_path"])
                 print()
+            elif cmd == "findings":
+                from .session_cmds import findings_list, parse_findings_flags
+
+                kwargs, err = parse_findings_flags(rest)
+                print(err or findings_list(app, **kwargs))
+            elif cmd == "finding":
+                from .session_cmds import finding_detail
+
+                print()
+                render_markdown(finding_detail(app, rest))
+                print()
+            elif cmd == "triage":
+                from .session_cmds import triage_finding
+
+                phrak_print(triage_finding(app, rest))
+            elif cmd == "note":
+                from .session_cmds import note_finding
+
+                phrak_print(note_finding(app, rest))
+            elif cmd == "clear":
+                session.clear()
+                phrak_print("context cleared — starting a fresh thread.")
+            elif cmd == "model":
+                if not rest:
+                    phrak_print(
+                        f"model :: {BGREEN}{session.model_desc}{RESET} "
+                        f"{GREY}(/model <name> to switch, "
+                        f"/model default to reset){RESET}"
+                    )
+                else:
+                    name = "" if rest in ("default", "reset") else rest
+                    phrak_print(f"model :: {BGREEN}{session.switch_model(name)}{RESET}")
+            elif cmd == "cost":
+                print(session.cost_summary())
+            elif cmd == "verbose":
+                session.verbose = not session.verbose
+                state = "on (full tool output)" if session.verbose else "off (summary)"
+                phrak_print(f"verbose :: {state}")
             elif cmd in app.registry.names():
                 if not rest:
                     print(f"usage: /{cmd} <task>")
@@ -347,11 +386,42 @@ def cmd_chat(args) -> int:
                 )
             continue
 
-        # default: conversational turn with tool use + thread memory.
-        reply = session.send(line)
+        # default: conversational turn with tool use + thread memory. Any
+        # `@path` reference is inlined first, and echoed back so a typo'd or
+        # out-of-workspace path is visible now rather than as a confused answer
+        # a minute from now.
+        from .session_cmds import describe_at_refs, expand_at_refs
+
+        for desc in describe_at_refs(line, app.config.paths.workspace):
+            phrak_print(f"{GREY}attached {desc}{RESET}")
+        reply = session.send(expand_at_refs(line, app.config.paths.workspace))
         print()
         render_markdown(reply)
         print()
+    return 0
+
+
+def cmd_findings(args) -> int:
+    """List / inspect the durable finding store outside chat (and for CI)."""
+    app = _load_app(args)
+    from .session_cmds import finding_detail, findings_json, findings_list
+
+    if getattr(args, "json", False):
+        print(findings_json(app))
+        return 0
+    if not getattr(args, "quiet", False):
+        print(mini_banner())
+    if args.id:
+        render_markdown(finding_detail(app, args.id))
+        return 0
+    print(
+        findings_list(
+            app,
+            severity=args.severity,
+            status=args.status,
+            resurfaced=args.resurfaced,
+        )
+    )
     return 0
 
 
@@ -392,7 +462,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--json",
         action="store_true",
-        help="emit machine-readable JSON where supported (run)",
+        help="emit machine-readable JSON where supported (run, findings)",
     )
     # No subcommand => conversational chat (like `claude` with no args).
     p.set_defaults(func=cmd_chat)
@@ -434,6 +504,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--reindex", action="store_true", help="rebuild the index before asking"
     )
     sp.set_defaults(func=cmd_ask)
+
+    sp = sub.add_parser("findings", help="list or inspect recorded findings")
+    sp.add_argument("id", nargs="?", default="", help="show one finding in full")
+    sp.add_argument("--severity", default="", help="filter by severity")
+    sp.add_argument("--status", default="", help="filter by effective status")
+    sp.add_argument(
+        "--resurfaced",
+        action="store_true",
+        help="only findings whose evidence changed since a human verdict",
+    )
+    sp.set_defaults(func=cmd_findings)
 
     sub.add_parser("interactive", help="alias for chat").set_defaults(func=cmd_chat)
 

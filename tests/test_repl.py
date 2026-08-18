@@ -35,14 +35,43 @@ def test_command_names_includes_agents_and_builtins():
     assert len(names) == len(set(names))  # de-duped
 
 
-def test_chat_help_renders():
-    import io
+def test_command_names_includes_findings_and_session_commands():
+    names = repl.command_names(_app())
+    for n in ("findings", "finding", "triage", "note"):
+        assert n in names
+    for n in ("clear", "model", "cost", "verbose"):
+        assert n in names
+
+
+def _help_output() -> str:
     import contextlib
+    import io
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         repl.chat_help(_app())
-    out = buf.getvalue()
+    return buf.getvalue()
+
+
+def test_chat_help_renders():
+    out = _help_output()
     assert "/help" in out and "/threat_model" in out
     assert "/ask" in out and "/config" in out
     assert "/clean" not in out
+
+
+def test_chat_help_documents_findings_session_and_at_refs():
+    out = _help_output()
+    assert "/findings" in out and "/triage" in out and "/note" in out
+    assert "/clear" in out and "/model" in out and "/cost" in out
+    assert "@path/to/file" in out
+
+
+def test_findings_subcommand_parses():
+    from appsec.cli import build_parser
+
+    args = build_parser().parse_args(["findings", "--severity", "high", "--resurfaced"])
+    assert args.cmd == "findings"
+    assert args.severity == "high" and args.resurfaced is True
+    assert args.id == ""
+    assert build_parser().parse_args(["findings", "F-123"]).id == "F-123"

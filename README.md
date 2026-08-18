@@ -156,6 +156,10 @@ phrak agent code_review "review for injection bugs" -w ./target
 phrak ask "how are sessions authenticated?" -w ./target       # RAG over the code
 phrak ask --reindex "..." -w ./target  # rebuild the code index before asking
 phrak agents                           # list agents (and the model each uses)
+phrak findings -w ./target             # every finding recorded so far
+phrak findings --severity high --resurfaced -w ./target   # filter the backlog
+phrak findings FND-284b4aac0d -w ./target                 # one finding in full
+phrak --json findings -w ./target      # the whole store as JSON, for CI
 ```
 
 Global flags work on every subcommand: `-w/--workspace`, `-c/--config`,
@@ -170,6 +174,11 @@ text is a normal turn (PHRAK reads code and answers, keeping thread context), an
 everything else is a slash command. `Tab` autocompletes them, `↑/↓` filters your
 history by prefix, and unknown commands get a "did you mean" hint.
 
+Anywhere in a message, `@path/to/file` inlines that file from the workspace into
+the turn. Each reference is echoed back before the model runs (`attached
+@app.py (1,204 B)`), so a typo'd path or a refused traversal is visible
+immediately; files outside the workspace are never inlined.
+
 | Command | What it does |
 |---------|--------------|
 | `/ask <text> [--reindex]` | Answer a question grounded in the codebase (RAG) |
@@ -177,12 +186,49 @@ history by prefix, and unknown commands get a "did you mean" hint.
 | `/route <text>` | Auto-route to the single best-fit agent |
 | `/code_review`, `/threat_model`, `/test_case` `<text>` | Run one agent directly |
 | `/agents [--verbose]` | List agents (with `--verbose`, their tools too) |
+| `/findings [filters]` | List recorded findings (see [Triage](#triage-findings)) |
+| `/finding <id>` | One finding in full: evidence, taint paths, history, notes |
+| `/triage <id> <status> [note]` | Record your verdict on a finding |
+| `/note <id> <text>` | Attach a reviewer note |
+| `/clear` | Forget the conversation so far (fresh thread) |
+| `/model [name]` | Show or switch the chat model for this session |
+| `/cost` | Tokens used and estimated spend this session |
+| `/verbose` | Toggle full tool output vs. one-line summaries |
 | `/clone <url> [dest] [--index]` | Shallow-clone a repo to analyze |
 | `/config [--show]` | Re-run the setup wizard (or print the redacted config) |
 | `/help`, `/quit` | Grouped command list; exit |
 
 Every `/run`, `/route`, and single-agent invocation saves and indexes its report
 exactly like the equivalent CLI command.
+
+## Triage findings
+
+Agents write every finding into a durable, fingerprint-keyed store under
+`.phrack/findings/` — so a finding keeps its identity across runs, and your
+verdict on it survives the next scan. `/findings` and `phrak findings` are the
+read/triage side of that store:
+
+```bash
+phrak findings                                  # the whole backlog, newest first
+phrak findings --severity high --status new     # filter by severity / status
+phrak findings --resurfaced                     # evidence changed since your verdict
+phrak findings FND-284b4aac0d                   # full detail + status history + notes
+phrak --json findings                           # machine-readable, for a CI gate
+```
+
+In chat, `/triage <id> <status> [note]` records a **human** verdict — one of
+`new`, `confirmed`, `unconfirmed`, `false_positive`, `accepted_risk`, `fixed`.
+Human triage is the authority of last resort: it can move a finding anywhere,
+it's kept on a separate track from the agent's own status (so you can always see
+both), and it is preserved when a later run re-observes the same finding.
+
+If a re-run turns up materially stronger evidence for something you'd dismissed
+— confidence jumped, severity changed, or a supporting taint path newly appeared
+— the record is flagged **⟲ re-surfaced** for another look. `--resurfaced`
+lists exactly those, and your next `/triage` clears the flag.
+
+An `<id>` can be the full finding id, its fingerprint, or a unique prefix of
+either.
 
 ## Bring in a codebase (`phrak clone`)
 
