@@ -244,8 +244,12 @@ class Orchestrator:
 
     # ------------------------------------------------------------- planning
     def plan(self, request: str) -> list[Step]:
+        # Only plannable agents are offered: an assembly agent like
+        # generate_report has to be invoked deliberately, never scheduled into
+        # the middle of a run where it would report on findings not yet made.
+        plannable = self.registry.plannable_names()
         prompt = _PLANNER_PROMPT.format(
-            catalog=self.registry.catalog(), request=request
+            catalog=self.registry.catalog(only_plannable=True), request=request
         )
         try:
             data = _extract_json(message_text(self.llm.invoke(prompt)))
@@ -256,17 +260,19 @@ class Orchestrator:
         if data and isinstance(data.get("plan"), list):
             for item in data["plan"]:
                 name = item.get("agent")
-                if name in self.registry.names():
+                if name in plannable:
                     steps.append(Step(agent=name, task=item.get("task", request)))
         if not steps:  # fallback: run every agent on the raw request
-            steps = [Step(agent=n, task=request) for n in self.registry.names()]
+            steps = [Step(agent=n, task=request) for n in plannable]
         return steps
 
     # -------------------------------------------------------------- routing
     def route(self, request: str) -> str:
         """Pick the single most appropriate agent for a request."""
-        names = self.registry.names()
-        prompt = _ROUTER_PROMPT.format(catalog=self.registry.catalog(), request=request)
+        names = self.registry.plannable_names()
+        prompt = _ROUTER_PROMPT.format(
+            catalog=self.registry.catalog(only_plannable=True), request=request
+        )
         try:
             text = message_text(self.llm.invoke(prompt)).strip()
         except Exception:
@@ -284,8 +290,10 @@ class Orchestrator:
     def _heuristic_route(self, request: str) -> str:
         """Keyword fallback when the LLM router is unhelpful."""
         words = set(re.findall(r"[a-z0-9]+", request.lower()))
-        best, best_score = self.registry.names()[0], -1
+        best, best_score = self.registry.plannable_names()[0], -1
         for spec in self.registry.specs():
+            if not spec.plannable:
+                continue
             hay = f"{spec.name} {spec.description} {' '.join(spec.tags)}".lower()
             score = sum(1 for w in words if w in hay)
             if score > best_score:
@@ -297,6 +305,12 @@ class Orchestrator:
         self, name: str, task: str, context: str = "", quiet: bool = False
     ) -> str:
         spec = self.registry.get(name)
+        if spec.runner is not None:
+            # An assembly agent: its output is built from stored artifacts, not
+            # written by a tool-calling loop. See AgentSpec.runner.
+            return spec.runner(
+                task, config=self.config, llm=self._model_for(name), context=context
+            )
         agent = Agent(
             spec, self._model_for(name), self.skills, self.config, quiet=quiet
         )
@@ -338,7 +352,7 @@ class Orchestrator:
         # the verification step the user thought they configured.
         verify_rule = _VERIFY_RULE if "verify" in self.registry.names() else ""
         prompt = _DAG_PLANNER_PROMPT.format(
-            catalog=self.registry.catalog(),
+            catalog=self.registry.catalog(only_plannable=True),
             request=request,
             verify_rule=verify_rule,
         )
@@ -349,7 +363,7 @@ class Orchestrator:
             data = None
 
         tasks: list[Task] = []
-        names = set(self.registry.names())
+        names = set(self.registry.plannable_names())
         if data and isinstance(data.get("tasks"), list):
             seen_ids: set[str] = set()
             for item in data["tasks"]:

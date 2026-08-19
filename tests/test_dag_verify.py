@@ -54,14 +54,34 @@ def test_verify_agent_scheduled_after_code_review_when_present(config):
     reply = json.dumps(
         {
             "tasks": [
-                {"id": "t1", "agent": "code_review", "task": "review",
-                 "depends_on": [], "parallel_group": "static"},
-                {"id": "t2", "agent": "threat_model", "task": "model",
-                 "depends_on": [], "parallel_group": "static"},
-                {"id": "t3", "agent": "verify", "task": "confirm findings",
-                 "depends_on": ["t1"], "parallel_group": ""},
-                {"id": "t4", "agent": "test_case", "task": "tests",
-                 "depends_on": ["t1", "t2"], "parallel_group": ""},
+                {
+                    "id": "t1",
+                    "agent": "code_review",
+                    "task": "review",
+                    "depends_on": [],
+                    "parallel_group": "static",
+                },
+                {
+                    "id": "t2",
+                    "agent": "threat_model",
+                    "task": "model",
+                    "depends_on": [],
+                    "parallel_group": "static",
+                },
+                {
+                    "id": "t3",
+                    "agent": "verify",
+                    "task": "confirm findings",
+                    "depends_on": ["t1"],
+                    "parallel_group": "",
+                },
+                {
+                    "id": "t4",
+                    "agent": "test_case",
+                    "task": "tests",
+                    "depends_on": ["t1", "t2"],
+                    "parallel_group": "",
+                },
             ]
         }
     )
@@ -82,8 +102,7 @@ def test_verify_agent_dropped_when_not_registered(config):
         {
             "tasks": [
                 {"id": "t1", "agent": "code_review", "task": "review"},
-                {"id": "t2", "agent": "verify", "task": "poc",
-                 "depends_on": ["t1"]},
+                {"id": "t2", "agent": "verify", "task": "poc", "depends_on": ["t1"]},
             ]
         }
     )
@@ -122,8 +141,10 @@ def test_planner_prompt_includes_verify_guidance_when_available(config):
     prompt = (captured["prompts"][0] or "").lower()
     # The rule text should tell the planner to include a verify task that
     # depends on code_review — not merely list verify in the catalog.
-    assert "verify task" in prompt or "verify agent" in prompt or (
-        "verify" in prompt and "depends on code_review" in prompt
+    assert (
+        "verify task" in prompt
+        or "verify agent" in prompt
+        or ("verify" in prompt and "depends on code_review" in prompt)
     ), f"planner prompt missing verify scheduling guidance:\n{prompt}"
 
 

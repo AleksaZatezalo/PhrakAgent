@@ -95,12 +95,21 @@ def run_poc_sandboxed(
     cfg = require_config()
     if not getattr(cfg, "enable_verify", False):
         return VerifyResult(
-            False, -1, "", "", False,
+            False,
+            -1,
+            "",
+            "",
+            False,
             "verify sandbox is disabled (set enable_verify: true in config)",
         )
     if kind not in _KINDS:
         return VerifyResult(
-            False, -1, "", "", False, f"unsupported kind {kind!r}; use python or sh",
+            False,
+            -1,
+            "",
+            "",
+            False,
+            f"unsupported kind {kind!r}; use python or sh",
         )
     if not isinstance(script, str) or not script.strip():
         return VerifyResult(False, -1, "", "", False, "empty PoC script")
@@ -110,7 +119,11 @@ def run_poc_sandboxed(
     binary, runtime_name = _runtime_binary(cfg)
     if not binary:
         return VerifyResult(
-            False, -1, "", "", False,
+            False,
+            -1,
+            "",
+            "",
+            False,
             "no container runtime found (install docker or podman, "
             "or set verify_runtime)",
         )
@@ -126,17 +139,28 @@ def run_poc_sandboxed(
         script_file.chmod(0o755)
 
         cmd = [
-            binary, "run", "--rm",
-            "--network", str(cfg.verify_network or "none"),
+            binary,
+            "run",
+            "--rm",
+            "--network",
+            str(cfg.verify_network or "none"),
             "--read-only",
-            "--tmpfs", "/tmp:rw,size=64m,mode=1777",
-            "--user", "65534:65534",
-            "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges",
-            "--memory", f"{int(cfg.verify_memory_mb)}m",
-            "--pids-limit", str(int(cfg.verify_pids)),
-            "--workdir", "/poc",
-            "-v", f"{poc_dir}:/poc:ro",
+            "--tmpfs",
+            "/tmp:rw,size=64m,mode=1777",
+            "--user",
+            "65534:65534",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--memory",
+            f"{int(cfg.verify_memory_mb)}m",
+            "--pids-limit",
+            str(int(cfg.verify_pids)),
+            "--workdir",
+            "/poc",
+            "-v",
+            f"{poc_dir}:/poc:ro",
         ]
         if mount_workspace:
             ws = Path(cfg.paths.workspace).expanduser().resolve()
@@ -153,7 +177,11 @@ def run_poc_sandboxed(
             )
         except subprocess.TimeoutExpired as e:
             return VerifyResult(
-                False, 124, e.stdout or "", e.stderr or "", True,
+                False,
+                124,
+                e.stdout or "",
+                e.stderr or "",
+                True,
                 f"PoC exceeded wall-clock timeout ({cfg.verify_timeout_s}s)",
             )
         except FileNotFoundError as e:

@@ -6,6 +6,7 @@ Date Created: 07-31-2026
 
 from . import (  # noqa: F401  (registration side-effect)
     code_review,
+    generate_report,
     test_case,
     threat_model,
 )
@@ -37,6 +38,7 @@ def register_verify_if_enabled(config) -> None:
 
 __all__ = [
     "code_review",
+    "generate_report",
     "test_case",
     "threat_model",
     "register_verify_if_enabled",

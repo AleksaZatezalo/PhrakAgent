@@ -246,6 +246,137 @@ def findings_json(app) -> str:
     return json.dumps([r.to_dict() for r in _store(app).list()], indent=2, default=str)
 
 
+# --------------------------------------------------- manual (non-agentic) entry
+# A finding you verified yourself, entered by hand. No model is involved at any
+# point: the fields are exactly what you typed, and the id is derived from them.
+FINDING_FIELDS = [
+    # (attribute, prompt, required)
+    ("title", "Title", True),
+    ("category", "Category (e.g. SQL injection, broken access control)", True),
+    ("severity", "Severity [critical/high/medium/low/info]", True),
+    ("file", "File (workspace-relative)", True),
+    ("line", "Line", True),
+    ("end_line", "End line (blank = same)", False),
+    ("description", "Description — why it's exploitable", False),
+    ("recommendation", "Recommended fix", False),
+    ("cwe", "CWE id(s), comma-separated", False),
+    ("owasp", "OWASP category(s), comma-separated", False),
+    ("disproof", "What would disprove this", False),
+]
+
+
+def prompt_for_finding(ask=input) -> Optional[dict]:
+    """Collect a finding's fields interactively. None if the user aborts.
+
+    ``ask`` is injected so the flow is testable without a terminal.
+    """
+    values: dict = {}
+    for attr, label, required in FINDING_FIELDS:
+        suffix = "" if required else " (optional)"
+        while True:
+            try:
+                raw = (ask(f"  {label}{suffix}: ") or "").strip()
+            except (EOFError, KeyboardInterrupt):
+                return None
+            if raw or not required:
+                values[attr] = raw
+                break
+            print("    required — enter a value, or Ctrl-C to cancel.")
+    return values
+
+
+def add_manual_finding(
+    app,
+    title: str,
+    category: str,
+    severity: str,
+    file: str,
+    line,
+    end_line="",
+    description: str = "",
+    recommendation: str = "",
+    cwe: str = "",
+    owasp: str = "",
+    disproof: str = "",
+    confidence: float = 1.0,
+) -> str:
+    """Record a hand-verified finding. Returns a human-readable result message.
+
+    Recorded on the **human** status track as ``confirmed`` — you verified it,
+    so it outranks anything an agent later says about the same code, and it
+    survives re-runs. The id is derived from the finding's own content
+    (category + location + title), so re-adding the same issue updates that
+    record rather than creating a second one.
+    """
+    from .models.findings import (
+        SEVERITIES,
+        FindingEvidence,
+        SecurityFinding,
+        validate_against_workspace,
+        validate_finding,
+    )
+
+    severity = (severity or "").strip().lower()
+    if severity not in SEVERITIES:
+        return f"Unknown severity '{severity}' (of {', '.join(SEVERITIES)})."
+    try:
+        start = int(str(line).strip())
+    except (TypeError, ValueError):
+        return f"Line must be a number, got '{line}'."
+    try:
+        end = int(str(end_line).strip()) if str(end_line).strip() else start
+    except ValueError:
+        return f"End line must be a number, got '{end_line}'."
+
+    finding = SecurityFinding(
+        title=title.strip(),
+        category=category.strip(),
+        severity=severity,
+        description=description.strip(),
+        recommendation=recommendation.strip(),
+        disproof=disproof.strip(),
+        confidence=min(max(float(confidence), 0.0), 1.0),
+        status="new",  # the agent track stays empty of human claims
+        human_status="confirmed",  # ...the human track carries the verdict
+        cwe_ids=_split_csv(cwe),
+        owasp_categories=_split_csv(owasp),
+        affected_files=[file.strip()],
+        evidence=[
+            FindingEvidence(
+                path=file.strip(),
+                start_line=start,
+                end_line=end,
+                reason=(description or title)[:200],
+                evidence_type="source_reference",
+            )
+        ],
+        source_agent="human",
+        source_tools=["manual"],
+    ).ensure_identity()
+
+    errs = validate_finding(finding)
+    if errs:
+        return "Not recorded: " + "; ".join(errs) + "."
+
+    # Grounding is reported, never used to downgrade: a human verdict is the
+    # authority here, and the path may legitimately point outside the indexed
+    # workspace (a dependency, a file since moved).
+    warning = ""
+    ground_errs = validate_against_workspace(finding, app.config.paths.workspace)
+    if ground_errs:
+        warning = "\n  ⚠ evidence not found in the workspace: " + "; ".join(ground_errs)
+
+    _store(app).upsert([finding], run_id="manual")
+    return (
+        f"Recorded {finding.id} — {finding.severity}, "
+        f"status confirmed (human).{warning}"
+    )
+
+
+def _split_csv(csv: str) -> list[str]:
+    return [x.strip() for x in (csv or "").split(",") if x.strip()]
+
+
 def copy_to_clipboard(text: str) -> bool:
     """Best-effort clipboard copy via a platform tool; False if none available."""
     if not text:

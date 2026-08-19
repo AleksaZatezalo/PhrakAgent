@@ -1,5 +1,6 @@
 """
-Description: Structured data models shared across PHRAK (findings, taint paths).
+Description: Structured data models shared across PHRAK (findings, taint paths,
+test cases).
 Author: Aleksa Zatezalo
 Date Created: 07-29-2026
 """

@@ -193,13 +193,43 @@ def cmd_agent(args) -> int:
 
 
 def _do_ask(app, question: str, reindex: bool = False, k=None) -> None:
-    """Shared /ask + `phrak ask` behaviour: RAG over the workspace."""
+    """Shared /ask + `phrak ask` behaviour: RAG over the workspace.
+
+    The index is brought up to date before every question — incrementally, or
+    from scratch with ``--reindex``. Syncing here rather than inside ``ask``
+    keeps the wait visible (embedding a big workspace is not instant) and lets
+    ``ask`` skip a second redundant walk.
+    """
+    from .ui import Spinner
+
     if reindex:
         phrak_print("reindexing workspace ...")
         stats = app.rag.reindex()
         phrak_print(f"indexed {stats['chunks']} chunks from {stats['added']} files")
+    else:
+        spinner = Spinner("syncing code index")
+
+        def _progress(done, total, rel):
+            # Embedding is CPU-bound (minutes for a few hundred files) — show
+            # the count so a first index reads as work, not as a freeze.
+            spinner.set_label(f"indexing workspace {done}/{total}")
+
+        spinner.start()
+        try:
+            stats = app.rag.sync(on_progress=_progress)
+        except Exception as e:
+            stats = None
+            spinner.stop()
+            phrak_print(f"{GREY}index not refreshed ({e}) — answering anyway{RESET}")
+        finally:
+            spinner.stop()
+        if stats and (stats["added"] or stats["updated"] or stats["removed"]):
+            phrak_print(
+                f"{GREY}index synced :: +{stats['added']} ~{stats['updated']} "
+                f"-{stats['removed']} file(s), {stats['chunks']} chunk(s){RESET}"
+            )
     phrak_print(f"asking :: {GREY}{question}{RESET}\n")
-    render_markdown(app.rag.ask(app.llm, question, k=k))
+    render_markdown(app.rag.ask(app.llm, question, k=k, sync=False))
 
 
 def cmd_ask(args) -> int:
@@ -347,6 +377,55 @@ def cmd_chat(args) -> int:
                 from .session_cmds import note_finding
 
                 phrak_print(note_finding(app, rest))
+            elif cmd == "finding-add":
+                from .session_cmds import add_manual_finding, prompt_for_finding
+
+                print(
+                    f"\n  {GREEN}new verified finding{RESET} "
+                    f"{GREY}(Ctrl-C to cancel; the id is generated){RESET}"
+                )
+                fields = prompt_for_finding()
+                print()
+                if fields is None:
+                    phrak_print("cancelled — nothing recorded.")
+                else:
+                    phrak_print(add_manual_finding(app, **fields))
+            elif cmd == "testcases":
+                from .testcase_cmds import parse_testcase_flags, test_cases_list
+
+                kwargs, err = parse_testcase_flags(rest)
+                print(err or test_cases_list(app, **kwargs))
+            elif cmd == "testcase":
+                from .testcase_cmds import test_case_detail
+
+                print()
+                render_markdown(test_case_detail(app, rest))
+                print()
+            elif cmd == "testcase-status":
+                from .testcase_cmds import set_test_case_status
+
+                phrak_print(set_test_case_status(app, rest))
+            elif cmd == "testcase-link":
+                from .testcase_cmds import link_test_case
+
+                phrak_print(link_test_case(app, rest))
+            elif cmd == "testcase-note":
+                from .testcase_cmds import note_test_case
+
+                phrak_print(note_test_case(app, rest))
+            elif cmd == "testcase-add":
+                from .testcase_cmds import add_manual_test_case, prompt_for_test_case
+
+                print(
+                    f"\n  {GREEN}new test case{RESET} "
+                    f"{GREY}(Ctrl-C to cancel; the id is generated){RESET}"
+                )
+                fields = prompt_for_test_case()
+                print()
+                if fields is None:
+                    phrak_print("cancelled — nothing added.")
+                else:
+                    phrak_print(add_manual_test_case(app, **fields))
             elif cmd == "clear":
                 session.clear()
                 phrak_print("context cleared — starting a fresh thread.")
@@ -367,7 +446,9 @@ def cmd_chat(args) -> int:
                 state = "on (full tool output)" if session.verbose else "off (summary)"
                 phrak_print(f"verbose :: {state}")
             elif cmd in app.registry.names():
-                if not rest:
+                # An assembly agent works from what's already stored, so it
+                # takes no task; the rest need one.
+                if not rest and app.registry.get(cmd).runner is None:
                     print(f"usage: /{cmd} <task>")
                     continue
                 print()
@@ -420,6 +501,126 @@ def cmd_findings(args) -> int:
             severity=args.severity,
             status=args.status,
             resurfaced=args.resurfaced,
+        )
+    )
+    return 0
+
+
+def cmd_report(args) -> int:
+    """Assemble the consolidated assessment report (alias for the agent)."""
+    app = _load_app(args)
+    quiet = getattr(args, "quiet", False)
+    if not quiet:
+        print(mini_banner())
+        phrak_print("assembling consolidated report ...")
+    task = " ".join(getattr(args, "note", []) or [])
+    out = app.orchestrator.run_agent("generate_report", task)
+    if getattr(args, "out", ""):
+        from pathlib import Path
+
+        Path(args.out).expanduser().write_text(out)
+        phrak_print(f"written :: {CYAN}{args.out}{RESET}")
+    else:
+        render_markdown(out)
+    _land_report(
+        app,
+        app.orchestrator.save_agent_report("generate_report", task, out),
+        quiet=quiet,
+    )
+    return 0
+
+
+def cmd_testcases(args) -> int:
+    """List / inspect the test-case backlog outside chat (and for CI)."""
+    app = _load_app(args)
+    from .testcase_cmds import test_case_detail, test_cases_json, test_cases_list
+
+    if getattr(args, "json", False):
+        print(test_cases_json(app))
+        return 0
+    if not getattr(args, "quiet", False):
+        print(mini_banner())
+    if args.id:
+        render_markdown(test_case_detail(app, args.id))
+        return 0
+    print(
+        test_cases_list(
+            app,
+            status=args.status,
+            severity=args.severity,
+            finding_id=args.finding,
+            unlinked=args.unlinked,
+        )
+    )
+    return 0
+
+
+def cmd_add_finding(args) -> int:
+    """Record a hand-verified finding. Flags for scripting, prompts without them."""
+    app = _load_app(args)
+    from .session_cmds import add_manual_finding, prompt_for_finding
+
+    if not args.title:
+        if not getattr(args, "quiet", False):
+            print(mini_banner())
+            print(
+                f"  {GREEN}new verified finding{RESET} "
+                f"{GREY}(Ctrl-C to cancel; the id is generated){RESET}"
+            )
+        fields = prompt_for_finding()
+        if fields is None:
+            print("cancelled — nothing recorded.")
+            return 130
+        print(add_manual_finding(app, **fields))
+        return 0
+    print(
+        add_manual_finding(
+            app,
+            title=args.title,
+            category=args.category,
+            severity=args.severity,
+            file=args.file,
+            line=args.line,
+            end_line=args.end_line,
+            description=args.description,
+            recommendation=args.recommendation,
+            cwe=args.cwe,
+            owasp=args.owasp,
+            disproof=args.disproof,
+        )
+    )
+    return 0
+
+
+def cmd_add_testcase(args) -> int:
+    """Add a hand-written test case. Flags for scripting, prompts without them."""
+    app = _load_app(args)
+    from .testcase_cmds import add_manual_test_case, prompt_for_test_case
+
+    if not args.title:
+        if not getattr(args, "quiet", False):
+            print(mini_banner())
+            print(
+                f"  {GREEN}new test case{RESET} "
+                f"{GREY}(Ctrl-C to cancel; the id is generated){RESET}"
+            )
+        fields = prompt_for_test_case()
+        if fields is None:
+            print("cancelled — nothing added.")
+            return 130
+        print(add_manual_test_case(app, **fields))
+        return 0
+    print(
+        add_manual_test_case(
+            app,
+            title=args.title,
+            target=args.target,
+            steps=args.steps,
+            expected_result=args.expected,
+            severity=args.severity,
+            objective=args.objective,
+            preconditions=args.preconditions,
+            finding_id=args.finding,
         )
     )
     return 0
@@ -494,7 +695,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("agent", help="run a single agent")
     sp.add_argument("name")
-    sp.add_argument("task", nargs="+")
+    # Optional: an assembly agent like generate_report works from stored
+    # artifacts and needs no task.
+    sp.add_argument("task", nargs="*")
     sp.set_defaults(func=cmd_agent)
 
     sp = sub.add_parser("ask", help="ask a question about the codebase (RAG)")
@@ -515,6 +718,53 @@ def build_parser() -> argparse.ArgumentParser:
         help="only findings whose evidence changed since a human verdict",
     )
     sp.set_defaults(func=cmd_findings)
+
+    sp = sub.add_parser(
+        "report",
+        help="assemble the consolidated assessment report (generate_report)",
+    )
+    sp.add_argument("note", nargs="*", help="optional scope note for the header")
+    sp.add_argument("--out", default="", help="write to this file instead of stdout")
+    sp.set_defaults(func=cmd_report)
+
+    sp = sub.add_parser("testcases", help="list or inspect the test-case backlog")
+    sp.add_argument("id", nargs="?", default="", help="show one test case in full")
+    sp.add_argument("--status", default="", help="new | in_progress | complete")
+    sp.add_argument("--severity", default="", help="filter by severity")
+    sp.add_argument("--finding", default="", help="only tests verifying this finding")
+    sp.add_argument(
+        "--unlinked", action="store_true", help="only tests not tied to a finding"
+    )
+    sp.set_defaults(func=cmd_testcases)
+
+    sp = sub.add_parser(
+        "add-finding", help="record a hand-verified finding (no AI; prompts if bare)"
+    )
+    sp.add_argument("--title", default="")
+    sp.add_argument("--category", default="")
+    sp.add_argument("--severity", default="")
+    sp.add_argument("--file", default="")
+    sp.add_argument("--line", default="")
+    sp.add_argument("--end-line", dest="end_line", default="")
+    sp.add_argument("--description", default="")
+    sp.add_argument("--recommendation", default="")
+    sp.add_argument("--cwe", default="", help="comma-separated, e.g. CWE-89")
+    sp.add_argument("--owasp", default="", help="comma-separated")
+    sp.add_argument("--disproof", default="")
+    sp.set_defaults(func=cmd_add_finding)
+
+    sp = sub.add_parser(
+        "add-testcase", help="add a test case by hand (no AI; prompts if bare)"
+    )
+    sp.add_argument("--title", default="")
+    sp.add_argument("--target", default="", help="endpoint / parameter / file:line")
+    sp.add_argument("--steps", default="", help="newline- or ' | '-separated")
+    sp.add_argument("--expected", default="", help="expected result")
+    sp.add_argument("--severity", default="medium")
+    sp.add_argument("--objective", default="")
+    sp.add_argument("--preconditions", default="")
+    sp.add_argument("--finding", default="", help="finding id this test verifies")
+    sp.set_defaults(func=cmd_add_testcase)
 
     sub.add_parser("interactive", help="alias for chat").set_defaults(func=cmd_chat)
 

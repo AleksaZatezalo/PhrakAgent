@@ -9,7 +9,7 @@ llm:
   model: qwen2.5-coder:7b       # any pulled Ollama model
   base_url: http://localhost:11434  # Ollama server URL
   temperature: 0.1
-  num_ctx: 8192                # ollama context window
+  num_ctx: 16384               # ollama context window (code default: 16384)
   max_tokens: 16000            # anthropic only: output cap per response
 
 # Claude instead of a local model — `phrak config` and pick "anthropic":

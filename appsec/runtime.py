@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:  # avoid import cycles at runtime
     from .config import Config
     from .models.findings import SecurityFinding
+    from .models.testcases import SecurityTestCase
 
 
 class _Runtime:
@@ -34,6 +35,9 @@ _FINDINGS: contextvars.ContextVar[Optional[list]] = contextvars.ContextVar(
 )
 _TOOL_RUNS: contextvars.ContextVar[Optional[list]] = contextvars.ContextVar(
     "tool_runs", default=None
+)
+_TEST_CASES: contextvars.ContextVar[Optional[list]] = contextvars.ContextVar(
+    "test_cases", default=None
 )
 
 
@@ -83,6 +87,30 @@ def take_findings() -> list:
     """Return and clear the captured findings (empty list if none/not capturing)."""
     out = _FINDINGS.get() or []
     _FINDINGS.set(None)
+    return out
+
+
+# ------------------------------------------------------------- test cases
+def begin_test_cases() -> list:
+    """Start capturing authored test cases for a run; returns the fresh list."""
+    fresh: list = []
+    _TEST_CASES.set(fresh)
+    return fresh
+
+
+def record_test_case(case: "SecurityTestCase") -> bool:
+    """Append a test case to the active run's collector. False if not capturing."""
+    coll = _TEST_CASES.get()
+    if coll is None:
+        return False
+    coll.append(case)
+    return True
+
+
+def take_test_cases() -> list:
+    """Return and clear the captured test cases (empty list if none)."""
+    out = _TEST_CASES.get() or []
+    _TEST_CASES.set(None)
     return out
 
 

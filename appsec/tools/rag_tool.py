@@ -38,6 +38,20 @@ def _get_index():
     return idx
 
 
+def _report_indexing(done: int, total: int, rel: str) -> None:
+    """Surface a long first index so it doesn't look like the agent has hung.
+
+    Embedding a few hundred files takes minutes on the local backend; without
+    this the run just stops producing output mid-tool-call.
+    """
+    if total < 25:  # a handful of files is quick — stay quiet
+        return
+    if done == 1 or done == total or done % 50 == 0:
+        from ..ui import report_activity
+
+        report_activity(f"  … indexing workspace {done}/{total} files ({rel})")
+
+
 @tool
 def rag_search(query: str, k: int = 6) -> str:
     """Semantic search over the workspace code index.
@@ -52,19 +66,27 @@ def rag_search(query: str, k: int = 6) -> str:
     idx = _get_index()
     if idx is None:
         return "rag_search unavailable (no workspace / index)."
+    # Refresh once per process, not once per call. Agents are read-only, so the
+    # workspace cannot change mid-run; a per-call sync re-walks the tree and, on
+    # a stale index, re-runs a multi-minute embed inside every tool call of
+    # every parallel agent. sync_once is serialized, so agents that arrive while
+    # one is indexing wait for it rather than duplicating the work.
+    stale = ""
     try:
-        if idx.count() == 0:
-            idx.sync()
+        idx.sync_once(on_progress=_report_indexing)
+    except Exception as e:
+        stale = f"[warning: index not refreshed ({e}); results may be stale]\n\n"
+    try:
         hits = idx.search(query, k=k)
     except Exception as e:
         return f"rag_search failed: {e}"
     if not hits:
-        return f"No semantic matches for: {query!r}"
+        return stale + f"No semantic matches for: {query!r}"
     out = []
     for header, body in hits:
         # Content already starts with the "# path:start-end" header line.
         out.append(body if body.startswith("# ") else f"# {header}\n{body}")
-    return "\n\n".join(out)[:8000]
+    return (stale + "\n\n".join(out))[:8000]
 
 
 def rag_search_tools() -> list:

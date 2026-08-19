@@ -28,9 +28,7 @@ def test_tool_call_tag():
 
 def test_fenced_parameters_key():
     """`parameters` (vs `arguments`) alias still works inside a fence."""
-    content = (
-        '```json\n{"name": "read_file", "parameters": {"path": "x"}}\n```'
-    )
+    content = '```json\n{"name": "read_file", "parameters": {"path": "x"}}\n```'
     calls, _ = extract_verbalized_calls(content, VALID)
     assert calls and calls[0]["args"] == {"path": "x"}
 

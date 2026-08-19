@@ -7,6 +7,7 @@ Date Created: 08-01-2026
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -67,6 +68,11 @@ class CodeIndex:
         self.workspace = Path(config.paths.workspace)
         self._embeddings: Optional[Embeddings] = None
         self._store = None  # built lazily so import/startup stays cheap
+        # Embedding is CPU-bound and writes to one SQLite-backed store, so the
+        # DAG's parallel agents must not sync at the same time: they would
+        # duplicate the work and contend on the same file.
+        self._sync_lock = threading.RLock()
+        self._synced = False
 
     # ------------------------------------------------------------- backing
     @property
@@ -115,9 +121,17 @@ class CodeIndex:
                     continue
                 fp = Path(dirpath) / name
                 try:
-                    if fp.stat().st_size > max_bytes:
-                        continue
+                    size = fp.stat().st_size
                 except OSError:
+                    continue
+                if size > max_bytes:
+                    continue
+                # Skip empty files. They chunk to nothing, so _add_file stores
+                # no metadata for them — which means _indexed_mtimes never sees
+                # them and every later sync "adds" them again, forever. A repo
+                # full of empty __init__.py files would never reach a clean
+                # no-op sync. There is nothing in them to retrieve anyway.
+                if size == 0:
                     continue
                 yield fp
 
@@ -196,43 +210,76 @@ class CodeIndex:
         self.store.add_texts(texts, metadatas=metas, ids=ids)
         return len(texts)
 
-    def sync(self) -> dict:
+    def sync(self, on_progress=None) -> dict:
         """Incrementally bring the index in line with the workspace.
+
+        Only files whose mtime changed are re-embedded, but embedding is
+        CPU-bound: a first sync over a few hundred files takes minutes. Callers
+        that can be waited on should pass ``on_progress(done, total, rel)`` so
+        that time is visible rather than looking like a hang.
+
+        Serialized: two agents syncing the same store at once would duplicate
+        every embedding and contend on one SQLite file.
 
         Returns ``{"added", "updated", "removed", "chunks"}`` file/chunk counts.
         """
-        indexed = self._indexed_mtimes()
-        seen: set[str] = set()
-        added = updated = chunks = 0
+        with self._sync_lock:
+            indexed = self._indexed_mtimes()
+            seen: set[str] = set()
+            added = updated = chunks = 0
 
-        for fp in self._iter_files():
-            rel = self._rel(fp)
-            seen.add(rel)
-            try:
-                mtime = fp.stat().st_mtime
-            except OSError:
-                continue
-            prior = indexed.get(rel)
-            if prior is None:
+            stale: list[tuple[Path, str, float, bool]] = []
+            for fp in self._iter_files():
+                rel = self._rel(fp)
+                seen.add(rel)
+                try:
+                    mtime = fp.stat().st_mtime
+                except OSError:
+                    continue
+                prior = indexed.get(rel)
+                if prior is None:
+                    stale.append((fp, rel, mtime, False))
+                elif abs(float(prior) - mtime) > 1e-6:
+                    stale.append((fp, rel, mtime, True))
+
+            total = len(stale)
+            for i, (fp, rel, mtime, is_update) in enumerate(stale, 1):
+                if on_progress:
+                    on_progress(i, total, rel)
+                if is_update:
+                    self._delete_path(rel)
+                    updated += 1
+                else:
+                    added += 1
                 chunks += self._add_file(fp, rel, mtime)
-                added += 1
-            elif abs(float(prior) - mtime) > 1e-6:
-                self._delete_path(rel)
-                chunks += self._add_file(fp, rel, mtime)
-                updated += 1
 
-        removed = 0
-        for rel in indexed:
-            if rel not in seen:
-                self._delete_path(rel)
-                removed += 1
+            removed = 0
+            for rel in indexed:
+                if rel not in seen:
+                    self._delete_path(rel)
+                    removed += 1
 
-        return {
-            "added": added,
-            "updated": updated,
-            "removed": removed,
-            "chunks": chunks,
-        }
+            self._synced = True
+            return {
+                "added": added,
+                "updated": updated,
+                "removed": removed,
+                "chunks": chunks,
+            }
+
+    def sync_once(self, on_progress=None) -> dict:
+        """Sync at most once per process; a no-op on every later call.
+
+        For the agent-facing ``rag_search`` tool. Every PHRAK agent tool is
+        read-only, so the workspace cannot change during a run — re-syncing per
+        tool call re-walks the tree and re-reads the whole index's metadata for
+        nothing, and on a stale index it re-runs a multi-minute embed inside
+        each tool call, in each parallel agent.
+        """
+        with self._sync_lock:
+            if self._synced:
+                return {"added": 0, "updated": 0, "removed": 0, "chunks": 0}
+            return self.sync(on_progress=on_progress)
 
     def index_file(self, path: str | Path) -> int:
         """Add or refresh ONE file's chunks; returns how many were indexed.
@@ -277,13 +324,35 @@ class CodeIndex:
             out.append((header, d.page_content))
         return out
 
-    def ask(self, llm: BaseChatModel, question: str, k: Optional[int] = None) -> str:
-        """Answer ``question`` grounded in retrieved code, with citations."""
-        if self.count() == 0:
-            self.sync()
+    def ask(
+        self,
+        llm: BaseChatModel,
+        question: str,
+        k: Optional[int] = None,
+        sync: bool = True,
+    ) -> str:
+        """Answer ``question`` grounded in retrieved code, with citations.
+
+        Syncs the index first. That sync is incremental (mtime-keyed, so only
+        changed files re-embed) and it is not optional by default: an answer
+        built from a stale index carries the same confident ``file:line``
+        citations as a current one, which is the worst way to be wrong. Pass
+        ``sync=False`` only when the caller has just synced.
+        """
+        stale_warning = ""
+        if sync or self.count() == 0:
+            try:
+                self.sync()
+            except Exception as e:
+                # Answer from what's indexed rather than failing outright — but
+                # say so, so a stale citation is never read as a current one.
+                stale_warning = (
+                    f"> ⚠ Could not refresh the code index ({e}). The answer "
+                    "below may describe an older version of the code.\n\n"
+                )
         hits = self.search(question, k=k)
         if not hits:
-            return (
+            return stale_warning + (
                 "The code index is empty or found nothing relevant. Make sure "
                 "the workspace points at your code, then try again "
                 "(or reindex with `/ask --reindex`)."
@@ -296,6 +365,6 @@ class CodeIndex:
             )
         prompt = _ANSWER_PROMPT.format(question=question, context="\n\n".join(blocks))
         try:
-            return message_text(llm.invoke(prompt))
+            return stale_warning + message_text(llm.invoke(prompt))
         except Exception as e:
             return f"[ask failed: {e}]"

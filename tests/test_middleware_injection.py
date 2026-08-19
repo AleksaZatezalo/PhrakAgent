@@ -33,9 +33,7 @@ def test_json_inside_example_word_is_ignored_even_when_fenced():
 
 
 def test_json_inside_for_instance_is_ignored():
-    content = (
-        'For instance:\n```json\n{"name":"list_dir","args":{"path":"."}}\n```'
-    )
+    content = 'For instance:\n```json\n{"name":"list_dir","args":{"path":"."}}\n```'
     calls, _ = extract_verbalized_calls(content, VALID)
     assert calls == []
 

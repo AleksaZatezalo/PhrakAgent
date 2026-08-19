@@ -13,10 +13,15 @@ from appsec import repl
 
 class _Registry:
     def names(self):
-        return ["code_review", "threat_model"]
+        return ["code_review", "threat_model", "generate_report"]
 
     def get(self, name):
-        return SimpleNamespace(description=f"{name} description")
+        # generate_report is an assembly agent: it carries a runner and takes
+        # no task argument, so /help renders it without one.
+        return SimpleNamespace(
+            description=f"{name} description",
+            runner=(lambda *a, **k: "") if name == "generate_report" else None,
+        )
 
 
 def _app():
@@ -65,6 +70,20 @@ def test_chat_help_documents_findings_session_and_at_refs():
     assert "/findings" in out and "/triage" in out and "/note" in out
     assert "/clear" in out and "/model" in out and "/cost" in out
     assert "@path/to/file" in out
+
+
+def test_chat_help_documents_test_case_and_manual_entry_commands():
+    out = _help_output()
+    for cmd in ("/testcases", "/testcase-status", "/testcase-link", "/testcase-add"):
+        assert cmd in out
+    assert "/finding-add" in out
+
+
+def test_chat_help_renders_assembly_agents_without_a_task_argument():
+    out = _help_output()
+    assert "/generate_report " in out  # listed...
+    assert "/generate_report <text>" not in out  # ...but takes no task
+    assert "/code_review <text>" in out  # a normal agent still does
 
 
 def test_findings_subcommand_parses():

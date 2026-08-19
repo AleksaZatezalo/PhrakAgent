@@ -1,5 +1,5 @@
 """
-Description: Persistent finding & taint-path history (Phase 7).
+Description: Persistent finding, taint-path & test-case history (Phase 7).
 Author: Aleksa Zatezalo
 Date Created: 07-31-2026
 """
@@ -7,6 +7,9 @@ Date Created: 07-31-2026
 from __future__ import annotations
 
 import json
+import os
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +21,7 @@ from .models.findings import (
     dedupe_findings,
     status_transition_allowed,
 )
+from .models.testcases import SecurityTestCase, dedupe_test_cases
 
 # Actors allowed to change a status track. Each maps to the finding field the
 # change is written to; "agent" writes the base ``status``.
@@ -48,8 +52,85 @@ def _read_jsonl(path: Path) -> list[dict]:
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
+    """Replace ``path`` atomically.
+
+    Written to a temp file in the same directory and renamed over the target, so
+    a reader never sees a half-written store and a crash mid-write can't truncate
+    the existing one. The temp name carries the PID *and* thread id: callers hold
+    :func:`_exclusive` so writes are already serialized, but a unique scratch
+    name means an unlocked caller degrades to a lost update rather than to two
+    writers clobbering one temp file mid-rename.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(json.dumps(r, default=str) for r in records) + "\n")
+    body = "\n".join(json.dumps(r, default=str) for r in records) + "\n"
+    tmp = path.parent / f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+    try:
+        tmp.write_text(body)
+        os.replace(tmp, path)  # atomic on POSIX and Windows
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
+
+# --------------------------------------------------------------------- locking
+# Every mutation is read-modify-write over the whole file, so two agents writing
+# at once would silently lose one side's findings. The DAG orchestrator runs
+# agents in THREADS (orchestrator.max_concurrency, default 3) and each persists
+# at the end of its run, so this is the default path, not an edge case.
+#
+# The threading lock covers that; the file lock additionally covers two `phrak`
+# processes pointed at one workspace. Locks are keyed by path because callers
+# build a fresh store object per write (see base_agent._persist_findings).
+_PATH_LOCKS: dict[str, threading.Lock] = {}
+_PATH_LOCKS_GUARD = threading.Lock()
+
+
+def _thread_lock_for(path: Path) -> threading.Lock:
+    key = str(path)
+    with _PATH_LOCKS_GUARD:
+        lock = _PATH_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _PATH_LOCKS[key] = lock
+        return lock
+
+
+@contextmanager
+def _exclusive(path: Path):
+    """Serialize a read-modify-write cycle on ``path`` across threads and processes.
+
+    The advisory file lock is best-effort: platforms without ``fcntl`` (Windows)
+    and filesystems that refuse ``flock`` (some NFS mounts) fall back to the
+    in-process lock alone, which still covers the parallel-agent case.
+    """
+    with _thread_lock_for(path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = path.parent / f"{path.name}.lock"
+        handle = None
+        try:
+            handle = open(lock_path, "w")
+        except OSError:
+            yield  # can't create a lockfile — the thread lock is what we have
+            return
+        try:
+            try:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            except (ImportError, OSError):
+                pass
+            yield
+        finally:
+            try:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except (ImportError, OSError):
+                pass
+            handle.close()
 
 
 # =====================================================================finding
@@ -127,8 +208,18 @@ class FindingStore:
         (confidence rose, or a supporting taint path newly appeared) the record
         is flagged ``resurfaced`` so a previously-dismissed issue gets a fresh
         look.
+
+        Load-merge-save runs under :func:`_exclusive` — parallel agents each
+        persist at the end of their run, and without it the later writer would
+        drop the earlier one's findings.
         """
         ts = ts or _now_iso()
+        with _exclusive(self.path):
+            return self._upsert_locked(findings, run_id, ts)
+
+    def _upsert_locked(
+        self, findings: list[SecurityFinding], run_id: str, ts: str
+    ) -> list[FindingRecord]:
         records = self._load()
         touched: list[FindingRecord] = []
         for f in dedupe_findings(list(findings)):
@@ -222,6 +313,17 @@ class FindingStore:
         actor = actor.lower()
         if actor not in ACTOR_FIELD:
             return None, f"unknown actor '{actor}' (use {', '.join(ACTOR_FIELD)})"
+        with _exclusive(self.path):
+            return self._set_status_locked(ident, new_status, actor, note, confidence)
+
+    def _set_status_locked(
+        self,
+        ident: str,
+        new_status: str,
+        actor: str,
+        note: str,
+        confidence: Optional[float],
+    ) -> tuple[Optional[FindingRecord], str]:
         records = self._load()
         rec = self._find(records, ident)
         if rec is None:
@@ -261,14 +363,15 @@ class FindingStore:
         )
 
     def add_note(self, ident: str, text: str) -> tuple[Optional[FindingRecord], str]:
-        records = self._load()
-        rec = self._find(records, ident)
-        if rec is None:
-            return None, f"no finding matching '{ident}'"
-        rec.notes.append({"ts": _now_iso(), "text": text})
-        records[rec.fingerprint] = rec
-        self._save(records)
-        return rec, f"note added to {rec.id}"
+        with _exclusive(self.path):
+            records = self._load()
+            rec = self._find(records, ident)
+            if rec is None:
+                return None, f"no finding matching '{ident}'"
+            rec.notes.append({"ts": _now_iso(), "text": text})
+            records[rec.fingerprint] = rec
+            self._save(records)
+            return rec, f"note added to {rec.id}"
 
     # ------------------------------------------------------------- read path
     def list(self) -> list[FindingRecord]:
@@ -319,7 +422,15 @@ class TaintStore:
     def upsert(
         self, findings: list[SecurityFinding], run_id: str = "", ts: str = ""
     ) -> list[dict]:
+        """Merge a run's taint paths in. Locked for the same reason as
+        :meth:`FindingStore.upsert` — parallel agents write this file too."""
         ts = ts or _now_iso()
+        with _exclusive(self.path):
+            return self._upsert_locked(findings, run_id, ts)
+
+    def _upsert_locked(
+        self, findings: list[SecurityFinding], run_id: str, ts: str
+    ) -> list[dict]:
         records = self._load()
         touched: list[dict] = []
         for f in findings:
@@ -373,6 +484,149 @@ class TaintStore:
         )
 
 
+# ===================================================================test cases
+class TestCaseStore:
+    """Durable test-case backlog under ``.phrack/testcases``.
+
+    Unlike findings — which the agents own and a human triages — test cases are
+    a **work list the operator drives**. The ``test_case`` agent authors them,
+    but status, results, notes, and the link to a finding are all human edits,
+    and they are preserved when a later run re-authors the same test.
+    """
+
+    def __init__(self, config: Config) -> None:
+        self.config = config
+        self.dir = config.phrack_dir / "testcases"
+        self.path = self.dir / "testcases.jsonl"
+
+    # ------------------------------------------------------------- load/save
+    def _load(self) -> dict[str, SecurityTestCase]:
+        out: dict[str, SecurityTestCase] = {}
+        for raw in _read_jsonl(self.path):
+            tc = SecurityTestCase.from_dict(raw)
+            tc.ensure_identity()
+            if tc.fingerprint:
+                out[tc.fingerprint] = tc
+        return out
+
+    def _save(self, records: dict[str, SecurityTestCase]) -> None:
+        ordered = sorted(
+            records.values(), key=lambda t: (t.created_at, t.id), reverse=False
+        )
+        _write_jsonl(self.path, [t.to_dict() for t in ordered])
+
+    # ------------------------------------------------------------ write path
+    def upsert(self, cases: list[SecurityTestCase]) -> list[SecurityTestCase]:
+        """Merge authored test cases in, preserving operator progress.
+
+        A re-authored test keeps its ``status``, ``result``, ``notes`` and any
+        ``finding_id`` the operator set by hand — re-running ``test_case``
+        refreshes the *instructions*, never your progress through them.
+        """
+        with _exclusive(self.path):
+            records = self._load()
+            touched: list[SecurityTestCase] = []
+            for tc in dedupe_test_cases(list(cases)):
+                tc.ensure_identity()
+                prev = records.get(tc.fingerprint)
+                if prev is not None:
+                    tc.status = prev.status
+                    tc.result = prev.result
+                    tc.notes = list(prev.notes)
+                    tc.finding_id = prev.finding_id or tc.finding_id
+                    tc.created_at = prev.created_at
+                tc.updated_at = datetime.now(timezone.utc)
+                records[tc.fingerprint] = tc
+                touched.append(tc)
+            self._save(records)
+            return touched
+
+    def add(self, tc: SecurityTestCase) -> tuple[Optional[SecurityTestCase], str]:
+        """Add ONE hand-written test case. Refuses a duplicate fingerprint."""
+        tc.ensure_identity()
+        with _exclusive(self.path):
+            records = self._load()
+            if tc.fingerprint in records:
+                existing = records[tc.fingerprint]
+                return existing, (
+                    f"a test case with the same title+target already exists "
+                    f"({existing.id}) — edit it instead"
+                )
+            records[tc.fingerprint] = tc
+            self._save(records)
+            return tc, f"added {tc.id}: {tc.title}"
+
+    def set_status(
+        self, ident: str, status: str, result: str = ""
+    ) -> tuple[Optional[SecurityTestCase], str]:
+        """Move a test case along the work list. ``result`` is optional."""
+        with _exclusive(self.path):
+            records = self._load()
+            tc = self._find(records, ident)
+            if tc is None:
+                return None, f"no test case matching '{ident}'"
+            tc.status = status
+            if result:
+                tc.result = result
+            tc.updated_at = datetime.now(timezone.utc)
+            records[tc.fingerprint] = tc
+            self._save(records)
+            suffix = f", result={tc.result}" if tc.result else ""
+            return tc, f"{tc.id}: status -> {status}{suffix}"
+
+    def link_finding(
+        self, ident: str, finding_id: str
+    ) -> tuple[Optional[SecurityTestCase], str]:
+        """Point a test case at the finding it verifies (or clear the link)."""
+        with _exclusive(self.path):
+            records = self._load()
+            tc = self._find(records, ident)
+            if tc is None:
+                return None, f"no test case matching '{ident}'"
+            tc.finding_id = finding_id
+            tc.updated_at = datetime.now(timezone.utc)
+            records[tc.fingerprint] = tc
+            self._save(records)
+            if not finding_id:
+                return tc, f"{tc.id}: finding link cleared"
+            return tc, f"{tc.id}: now verifies {finding_id}"
+
+    def add_note(self, ident: str, text: str) -> tuple[Optional[SecurityTestCase], str]:
+        with _exclusive(self.path):
+            records = self._load()
+            tc = self._find(records, ident)
+            if tc is None:
+                return None, f"no test case matching '{ident}'"
+            tc.notes.append(f"{_now_iso()}  {text}")
+            tc.updated_at = datetime.now(timezone.utc)
+            records[tc.fingerprint] = tc
+            self._save(records)
+            return tc, f"note added to {tc.id}"
+
+    # ------------------------------------------------------------- read path
+    def list(self) -> list[SecurityTestCase]:
+        return sorted(self._load().values(), key=lambda t: (t.created_at, t.id))
+
+    def get(self, ident: str) -> Optional[SecurityTestCase]:
+        return self._find(self._load(), ident)
+
+    @staticmethod
+    def _find(
+        records: dict[str, SecurityTestCase], ident: str
+    ) -> Optional[SecurityTestCase]:
+        ident = (ident or "").strip()
+        if not ident:
+            return None
+        for t in records.values():
+            if ident in (t.id, t.fingerprint):
+                return t
+        low = ident.lower()
+        for t in records.values():
+            if t.id.lower().endswith(low) or t.fingerprint.lower().startswith(low):
+                return t
+        return None
+
+
 # =====================================================================rendering
 def render_finding_list(records: list[FindingRecord]) -> str:
     """A compact, one-line-per-finding overview of the durable store."""
@@ -424,3 +678,45 @@ def render_finding_detail(rec: FindingRecord) -> str:
         for n in rec.notes:
             parts.append(f"- {n['ts']}  {n['text']}")
     return "\n".join(parts)
+
+
+_STATUS_MARK = {"new": "☐", "in_progress": "◐", "complete": "☑"}
+
+
+def render_test_case_list(cases: list["SecurityTestCase"]) -> str:
+    """A compact checklist view — the operator's work list, in authoring order."""
+    if not cases:
+        return (
+            "No test cases recorded yet. Run test_case to author them, or add "
+            "one by hand with /testcase-add."
+        )
+    rows = []
+    for tc in cases:
+        mark = _STATUS_MARK.get(tc.status, "☐")
+        link = tc.finding_id or tc.threat_ref or "—"
+        result = f" [{tc.result}]" if tc.result else ""
+        rows.append(
+            f"{mark} {tc.id}  [{tc.severity:<8}] {tc.status:<12}"
+            f"{result:<14} {tc.title[:46]:<46}  verifies {link}"
+        )
+    done = sum(1 for t in cases if t.status == "complete")
+    doing = sum(1 for t in cases if t.status == "in_progress")
+    header = (
+        f"{len(cases)} test case(s) — {done} complete, {doing} in progress, "
+        f"{len(cases) - done - doing} new:\n"
+    )
+    return header + "\n".join(rows)
+
+
+def render_test_case_detail(tc: "SecurityTestCase") -> str:
+    """Full detail for one test case, plus where it came from."""
+    origin = tc.source_agent or "added by hand"
+    return "\n".join(
+        [
+            tc.to_markdown(),
+            "",
+            "---",
+            f"Origin: {origin}   Created: {tc.created_at.isoformat(timespec='seconds')}"
+            f"   Updated: {tc.updated_at.isoformat(timespec='seconds')}",
+        ]
+    )

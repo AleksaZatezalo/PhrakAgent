@@ -88,14 +88,13 @@ HAVE_RUNTIME = shutil.which("docker") is not None or shutil.which("podman") is n
 def _daemon_reachable() -> bool:
     """docker/podman binary present is not enough — daemon must respond."""
     import subprocess
+
     for b in ("docker", "podman"):
         p = shutil.which(b)
         if not p:
             continue
         try:
-            r = subprocess.run(
-                [p, "info"], capture_output=True, timeout=5, text=True
-            )
+            r = subprocess.run([p, "info"], capture_output=True, timeout=5, text=True)
             if r.returncode == 0:
                 return True
         except Exception:

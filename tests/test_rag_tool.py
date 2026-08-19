@@ -14,12 +14,10 @@ from appsec.tools.rag_tool import rag_search, rag_search_tools
 @pytest.fixture()
 def workspace(tmp_path):
     (tmp_path / "a.py").write_text(
-        "def login(u, p):\n"
-        "    return db.execute('SELECT * FROM u WHERE n=' + u)\n"
+        "def login(u, p):\n" "    return db.execute('SELECT * FROM u WHERE n=' + u)\n"
     )
     (tmp_path / "b.py").write_text(
-        "def profile(id):\n"
-        "    return db.execute(f'SELECT * FROM p WHERE id={id}')\n"
+        "def profile(id):\n" "    return db.execute(f'SELECT * FROM p WHERE id={id}')\n"
     )
     cfg = Config()
     cfg.paths.workspace = str(tmp_path)

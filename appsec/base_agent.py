@@ -7,7 +7,7 @@ Date Created: 08-01-2026
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, Optional
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -40,6 +40,15 @@ class AgentSpec:
     # smaller prompt, fewer completion rounds. Turn off for skill-heavy agents
     # whose prompt would otherwise blow past the model's context window.
     inline_skills: bool = True
+    # Replaces the generic tool-calling loop with ``runner(task, config, llm)``.
+    # For agents whose output must be *assembled* rather than written — the
+    # report generator quotes stored artifacts verbatim, so letting a model
+    # regenerate them would silently paraphrase findings.
+    runner: Optional[Callable[..., str]] = None
+    # Whether the orchestrator's planner/router may schedule this agent. Off for
+    # agents that only make sense when invoked deliberately, so an "assess this
+    # app" request can't pull them into the middle of a run.
+    plannable: bool = True
 
 
 class AgentRegistry:
@@ -67,9 +76,14 @@ class AgentRegistry:
     def specs(self) -> list[AgentSpec]:
         return [self._specs[n] for n in self.names()]
 
-    def catalog(self) -> str:
+    def plannable_names(self) -> list[str]:
+        """Agents the orchestrator's planner/router is allowed to schedule."""
+        return sorted(s.name for s in self._specs.values() if s.plannable)
+
+    def catalog(self, only_plannable: bool = False) -> str:
         """Human/LLM readable list of agents for routing prompts."""
-        return "\n".join(f"- {s.name}: {s.description}" for s in self.specs())
+        specs = [s for s in self.specs() if s.plannable or not only_plannable]
+        return "\n".join(f"- {s.name}: {s.description}" for s in specs)
 
 
 # The single global registry used across the process.
@@ -157,6 +171,7 @@ class Agent:
         from .middleware import VerbalizedToolCallMiddleware
         from .runtime import (
             begin_findings,
+            begin_test_cases,
             begin_tool_ledger,
             set_active_agent,
         )
@@ -165,6 +180,7 @@ class Agent:
         self._error = ""
         set_active_agent(self.spec.name)
         begin_findings()  # capture structured findings emitted via report_finding
+        begin_test_cases()  # capture test cases emitted via report_test_case
         begin_tool_ledger()  # track which tools actually executed (live-test gate)
         graph = create_agent(
             self.llm,
@@ -240,6 +256,7 @@ class Agent:
                 raise RuntimeError(f"{self.spec.name}: {self._error}")
             answer = self._fallback_report(task)
         answer = self._append_structured_findings(answer)
+        answer = self._append_structured_test_cases(answer)
         return answer
 
     # -------------------------------------------------- turn-outcome handling
@@ -348,7 +365,10 @@ class Agent:
     def _persist_findings(self, findings: list) -> None:
         """Record this run's findings into the durable cross-run history store.
 
-        Best-effort: history is a convenience layer, never allowed to fail a run.
+        Best-effort: history is a convenience layer, never allowed to fail a run
+        — but a failure is *reported*, because the store is what ``/findings``
+        triage reads, and silently dropping a run's findings looks identical to
+        having found nothing.
         """
         try:
             from .store import FindingStore, TaintStore
@@ -356,8 +376,45 @@ class Agent:
             run_id = getattr(self, "_run_id", "")
             FindingStore(self.config).upsert(findings, run_id=run_id)
             TaintStore(self.config).upsert(findings, run_id=run_id)
-        except Exception:
-            pass
+        except Exception as e:
+            self._note(f"could not write finding history: {e}")
+
+    # ---------------------------------------------------- structured test cases
+    def _append_structured_test_cases(self, answer: str) -> str:
+        """Persist any test cases authored this run and append them to the report."""
+        from .runtime import take_test_cases
+
+        cases = take_test_cases()
+        if not cases:
+            return answer
+        from .models.testcases import dedupe_test_cases
+
+        cases = dedupe_test_cases(cases)
+        order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+        cases.sort(key=lambda t: order.get(t.severity, 5))
+        self._note(f"{self.spec.name}: recorded {len(cases)} test case(s)")
+        self._persist_test_cases(cases)
+        parts = [
+            "",
+            "---",
+            "## Test Cases (tracked)",
+            f"_{len(cases)} test case(s) added to the backlog — track them with "
+            "`/testcases`._",
+            "",
+        ]
+        for tc in cases:
+            parts.append(tc.to_markdown())
+            parts.append("")
+        return answer + "\n".join(parts)
+
+    def _persist_test_cases(self, cases: list) -> None:
+        """Merge authored test cases into the durable backlog (progress preserved)."""
+        try:
+            from .store import TestCaseStore
+
+            TestCaseStore(self.config).upsert(cases)
+        except Exception as e:
+            self._note(f"could not write test-case backlog: {e}")
 
     def _incomplete_sections(self, text: str) -> list[str]:
         low = (text or "").lower()

@@ -19,8 +19,15 @@ def command_names(app) -> list[str]:
         "route",
         "findings",
         "finding",
+        "finding-add",
         "triage",
         "note",
+        "testcases",
+        "testcase",
+        "testcase-add",
+        "testcase-status",
+        "testcase-link",
+        "testcase-note",
         "clone",
         "config",
         "clear",
@@ -118,7 +125,12 @@ def chat_help(app) -> None:
         (
             "agents",
             [
-                (f"/{n} <text>", app.registry.get(n).description)
+                # An assembly agent (generate_report) works from what's already
+                # stored, so it is shown without a task argument.
+                (
+                    f"/{n}" if app.registry.get(n).runner else f"/{n} <text>",
+                    app.registry.get(n).description,
+                )
                 for n in app.registry.names()
             ]
             + [("/agents [--verbose]", "list agents (and their tools)")],
@@ -128,8 +140,20 @@ def chat_help(app) -> None:
             [
                 ("/findings [filters]", "list recorded findings across all runs"),
                 ("/finding <id>", "one finding in full: evidence, history, notes"),
+                ("/finding-add", "record a finding you verified yourself (no AI)"),
                 ("/triage <id> <status>", "record your verdict (add a note after it)"),
                 ("/note <id> <text>", "attach a reviewer note"),
+            ],
+        ),
+        (
+            "test cases",
+            [
+                ("/testcases [filters]", "the test-case backlog as a checklist"),
+                ("/testcase <id>", "one test case in full"),
+                ("/testcase-add", "write a test case by hand (no AI)"),
+                ("/testcase-status <id> <s>", "new | in_progress | complete [result]"),
+                ("/testcase-link <id> <fnd>", "tie a test to the finding it verifies"),
+                ("/testcase-note <id> <text>", "record what happened when you ran it"),
             ],
         ),
         (
