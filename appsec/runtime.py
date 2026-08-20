@@ -84,6 +84,15 @@ def record_finding(finding: "SecurityFinding") -> bool:
     return True
 
 
+def peek_findings() -> list:
+    """The findings captured so far WITHOUT clearing the collector.
+
+    Lets an agent check whether anything has been recorded yet (e.g. to decide
+    if a dedicated recording pass is needed) before the final ``take_findings``.
+    """
+    return list(_FINDINGS.get() or [])
+
+
 def take_findings() -> list:
     """Return and clear the captured findings (empty list if none/not capturing)."""
     out = _FINDINGS.get() or []
@@ -134,6 +143,11 @@ def record_test_case(case: "SecurityTestCase") -> bool:
         return False
     coll.append(case)
     return True
+
+
+def peek_test_cases() -> list:
+    """The test cases captured so far WITHOUT clearing the collector."""
+    return list(_TEST_CASES.get() or [])
 
 
 def take_test_cases() -> list:

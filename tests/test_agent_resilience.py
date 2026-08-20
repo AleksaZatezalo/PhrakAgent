@@ -153,6 +153,93 @@ def test_a_more_complete_turn_wins(agent):
     assert "fix it" in out
 
 
+# ------------------------------------------------ guaranteed recording pass
+class RecordingGraph(FakeGraph):
+    """FakeGraph that can record a finding when a turn's prompt matches.
+
+    Simulates the model calling report_finding: turns are the usual
+    ``("text", ...)`` / ``("raise", ...)`` pairs, plus ``("record", <finding>)``
+    which appends to the active run's collector (as the real tool would) and
+    yields an empty assistant turn.
+    """
+
+    def stream(self, payload, cfg, stream_mode=None):
+        self.prompts.append(payload["messages"][0].content)
+        kind, value = self.turns.pop(0) if self.turns else ("text", "")
+        if kind == "raise":
+            raise value
+        if kind == "record":
+            from appsec.runtime import record_finding
+
+            record_finding(value)
+            yield {"agent": {"messages": [AIMessage(content="DONE")]}}
+            return
+        yield {"agent": {"messages": [AIMessage(content=value)]}}
+
+
+def _finding():
+    from appsec.models.findings import SecurityFinding
+
+    return SecurityFinding(
+        title="SQLi", category="a03-injection", severity="high", description="d"
+    ).ensure_identity()
+
+
+@pytest.fixture
+def recording_agent(config, monkeypatch):
+    """An Agent whose tools include report_finding, wired to a RecordingGraph."""
+    import langchain.agents
+
+    from appsec.tools.findings_tool import finding_tools
+
+    spec = AgentSpec(
+        "recorder",
+        "records findings",
+        "be a recorder",
+        tool_factory=finding_tools,
+        report_sections=SECTIONS,
+    )
+    a = Agent(spec, FakeLLM(reply="unused"), SkillStore(config), config, quiet=True)
+    monkeypatch.setattr(
+        langchain.agents, "create_agent", lambda *args, **kwargs: a.graph
+    )
+    return a
+
+
+def test_unrecorded_report_triggers_a_recording_pass(recording_agent, runtime):
+    """A complete prose report with nothing recorded gets one transcription pass."""
+    recording_agent.graph = RecordingGraph(
+        [
+            ("text", _report()),  # complete report, but no report_finding call
+            ("record", _finding()),  # the transcription pass finally records one
+        ]
+    )
+    out = recording_agent.run("review the app")
+
+    # the second prompt is the transcription nudge carrying the report back
+    assert len(recording_agent.graph.prompts) == 2
+    assert "--- REPORT ---" in recording_agent.graph.prompts[1]
+    assert "findings here" in recording_agent.graph.prompts[1]
+    # and the finding it recorded shows up in the structured section
+    assert "Structured Findings" in out and "SQLi" in out
+
+
+def test_already_recorded_skips_the_recording_pass(recording_agent, runtime):
+    """If the model recorded as it went, no redundant transcription pass runs."""
+    recording_agent.graph = RecordingGraph(
+        [
+            ("record", _finding()),  # model records mid-run...
+            ("text", _report()),  # ...then writes its report
+        ]
+    )
+    out = recording_agent.run("review the app")
+
+    # exactly the two scripted turns — no extra transcription prompt
+    assert len(recording_agent.graph.prompts) == 2
+    assert not any("--- REPORT ---" in p for p in recording_agent.graph.prompts)
+    assert "SQLi" in out
+
+
 # ------------------------------------------------------- orchestrator report
 def test_all_failed_synthesis_names_the_errors(config):
     """The terminal message is where the user looks; it must carry the reason."""

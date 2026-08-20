@@ -246,6 +246,13 @@ class Agent:
             answer = self._wrap_up_if_exhausted(graph, cfg, answer)
             rounds += 1
 
+        # A weak local model often writes a full prose report but never calls
+        # report_finding / report_test_case, so the stores behind /findings and
+        # /testcases stay empty even though the report is full of issues. If this
+        # agent CAN record but recorded nothing, give it one focused pass to
+        # transcribe what it just wrote into structured items before we finalize.
+        self._ensure_items_recorded(graph, cfg, answer)
+
         self._note(f"{self.spec.name}: compiling the final report")
         if not answer:
             # Nothing usable at all. A provider-level failure (bad key, rate
@@ -332,6 +339,58 @@ class Agent:
         # This turn's text is a bookkeeping acknowledgement, never a report — it
         # is deliberately discarded so it cannot displace the real answer.
         self._budget_exhausted = False
+
+    def _ensure_items_recorded(self, graph, cfg: dict, answer: str) -> None:
+        """Guarantee a recording pass whenever the store is still empty.
+
+        ``_record_before_writeup`` only runs when a turn dies on the step budget.
+        A model that instead finishes its rounds *normally* — writing a complete
+        prose report but never calling report_finding / report_test_case — leaves
+        /findings and /testcases empty. This is the common failure for small
+        local models, which drift to prose and skip the capture tools.
+
+        So: if this agent can record but nothing has been captured yet, run one
+        focused pass that feeds the report back and asks the model to transcribe
+        each item into a structured call. Transcribing a report it already wrote
+        is a far easier task than the original review, so a weak model that
+        skipped the tools mid-run tends to succeed here.
+        """
+        names = self._recording_tools()
+        if not names:
+            return  # e.g. threat_model records nothing structured
+        from .runtime import peek_findings, peek_test_cases
+
+        if peek_findings() or peek_test_cases():
+            return  # the model already recorded as it went — nothing to backfill
+        report = (answer or "").strip()
+        if not report:
+            return  # no prose to transcribe; the budget-exhaustion path handles this
+        # Keep the fed-back report inside the model's window — on a 16k local
+        # context a long report plus the standing conversation would overflow.
+        from .llm import prompt_char_budget
+
+        cap = max(2_000, prompt_char_budget(self.config.llm) // 2)
+        if len(report) > cap:
+            report = report[:cap] + "\n… [report truncated for the recording pass]"
+        listed = " and ".join(f"`{n}`" for n in names)
+        self._note(
+            f"{self.spec.name}: nothing recorded yet — transcribing the report "
+            "into trackable items"
+        )
+        prompt = (
+            "Your written report is complete, but you have not RECORDED any of "
+            "its items — so /findings and /testcases are still empty and the "
+            "operator cannot track them. Do NOT read, search, or scan anything "
+            "further.\n\n"
+            f"Go through the report below and call {listed} once for EACH "
+            "distinct item it describes, using the exact title, file/line, "
+            "severity and other details already written there. These are the "
+            "only tool calls you may make now. Record every item — an item only "
+            "in prose does not exist for the operator. When done, reply DONE.\n\n"
+            "--- REPORT ---\n" + report
+        )
+        self._drive(graph, prompt, {**cfg, "recursion_limit": self._RECORD_STEPS})
+        self._budget_exhausted = False  # this pass may exhaust its own small budget
 
     def _wrap_up_if_exhausted(self, graph, cfg: dict, answer: str) -> str:
         """Ask for a write-up when a turn died on the step budget.
