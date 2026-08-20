@@ -585,12 +585,20 @@ class Orchestrator:
             }
             for t in tasks
         ]
+        # Persist each specialist's own report so generate_report can quote it.
+        # A pipeline run otherwise only saves the consolidated report, leaving
+        # generate_report with no threat_model / code_review section to include.
+        self._save_section_reports(tasks)
+
         report = self._synthesize(request, tasks)
         self._salvage_from_report(
             report,
             recover_findings=len(FindingStore(self.config).list()) == n_find_before,
             recover_test_cases=len(TestCaseStore(self.config).list()) == n_tc_before,
         )
+        # Now that findings exist (recorded by the agents or salvaged above), make
+        # sure every one — including unconfirmed findings — has a test case.
+        self._ensure_coverage()
         report_path = self._save_report(request, tasks, outputs, report)
         return {
             "plan": tasks,
@@ -690,6 +698,48 @@ class Orchestrator:
                 f"  {GREY}salvaged {got} from the consolidated report "
                 f"(agents recorded none){RESET}"
             )
+
+    def _save_section_reports(self, tasks: list[Task]) -> None:
+        """Save each completed threat_model / code_review task as its own report.
+
+        generate_report quotes the latest ``report-<ts>-<agent>.md`` for those
+        agents; a pipeline run only writes the consolidated report, so without
+        this those sections show as 'no report found' placeholders even though
+        the agents ran. Best-effort — a save failure never fails the run.
+        """
+        from .report import SECTION_AGENTS
+
+        wanted = {a for a, _ in SECTION_AGENTS}
+        for t in tasks:
+            if t.agent not in wanted or t.status != "done":
+                continue
+            body = (t.artifact or "").strip()
+            if not body or body.startswith("[task "):
+                continue  # nothing usable (failed/skipped placeholder)
+            try:
+                self.save_agent_report(t.agent, t.task, t.artifact)
+            except Exception as e:  # pragma: no cover - defensive
+                from .banner import GREY, RESET
+
+                print(f"  {GREY}(could not save {t.agent} report: {e}){RESET}")
+
+    def _ensure_coverage(self) -> None:
+        """Link/backfill test cases so every finding has one. Best-effort."""
+        from .banner import GREY, RESET
+        from .coverage import ensure_test_case_coverage
+
+        try:
+            r = ensure_test_case_coverage(self.config)
+        except Exception as e:  # pragma: no cover - defensive
+            print(f"  {GREY}(could not reconcile test-case coverage: {e}){RESET}")
+            return
+        bits = []
+        if r.get("linked"):
+            bits.append(f"linked {r['linked']} test case(s) to findings")
+        if r.get("generated"):
+            bits.append(f"added {r['generated']} verification test case(s)")
+        if bits:
+            print(f"  {GREY}coverage: {', '.join(bits)}{RESET}")
 
     def _save_report(
         self, request: str, plan: list[Step], outputs: list[dict], report: str

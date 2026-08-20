@@ -94,6 +94,49 @@ def test_save_agent_report_is_pruned_by_keep_reports(config):
     assert len(list(config.reports_dir().glob("report-*.md"))) == 2
 
 
+def test_run_saves_per_agent_section_reports(config):
+    """A pipeline run must leave threat_model / code_review reports on disk so
+    generate_report can quote them — otherwise those sections are placeholders
+    even though the agents ran."""
+    from appsec.orchestrator import Task
+    from appsec.report import _latest_report
+
+    class Recording(Orchestrator):
+        def run_agent(self, name, task, context="", quiet=False):
+            return f"# real {name} output\n\nbody"
+
+        def _synthesize(self, request, tasks):
+            return "consolidated"
+
+    orch = Recording(FakeLLM(reply="summary"), skills=None, config=config)
+    plan = [
+        Task(id="t1", agent="code_review", task="review"),
+        Task(id="t2", agent="threat_model", task="model"),
+    ]
+    orch._execute("assess", plan)
+
+    cr = _latest_report(config, "code_review")
+    tm = _latest_report(config, "threat_model")
+    assert cr is not None and "real code_review output" in cr.read_text()
+    assert tm is not None and "real threat_model output" in tm.read_text()
+
+
+def test_run_does_not_save_a_section_report_for_a_failed_agent(config):
+    from appsec.orchestrator import Task
+    from appsec.report import _latest_report
+
+    class Recording(Orchestrator):
+        def run_agent(self, name, task, context="", quiet=False):
+            raise RuntimeError("boom")  # task fails -> artifact is a placeholder
+
+        def _synthesize(self, request, tasks):
+            return "consolidated"
+
+    orch = Recording(FakeLLM(reply="summary"), skills=None, config=config)
+    orch._execute("assess", [Task(id="t1", agent="code_review", task="review")])
+    assert _latest_report(config, "code_review") is None
+
+
 def test_extract_json_variants():
     assert _extract_json('{"a": 1}') == {"a": 1}
     assert _extract_json('```json\n{"a": 2}\n```') == {"a": 2}

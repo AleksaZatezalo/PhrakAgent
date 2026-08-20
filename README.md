@@ -391,6 +391,14 @@ its status, result, notes and finding link — only the instructions (steps,
 target, severity) are refreshed. The identity is derived from title + target, so
 the same test written twice collapses into one backlog entry.
 
+**Every finding gets a test case.** After a full `phrak run`, the orchestrator
+reconciles the backlog against the findings store (`appsec/coverage.py`): it links
+an authored test case to the finding it plainly verifies, and backfills a minimal
+verification test case (`source_agent: coverage`, linked via `finding_id`) for any
+finding — confirmed or unconfirmed — that nothing else covers. So `/testcases
+--unlinked` shrinks to genuine gaps, and no finding is left with nothing to check
+it. The step is idempotent: a covered finding is never given a duplicate.
+
 ## The final report (`generate_report`)
 
 `phrak report` (or `/generate_report`) assembles one deliverable:
@@ -415,9 +423,14 @@ the code review" will paraphrase — and a paraphrased finding drifts away from
 the `file:line` evidence the report claims to rest on. The summary itself is
 prompted with a digest of that same material and told not to invent anything.
 
-The report is honest about gaps. If `threat_model` has never been run, the
-section says so and names the command to fix it, rather than quietly omitting a
-heading; and if the model is unreachable, the summary is replaced by a factual
+A full `phrak run` **leaves the material this report needs**: each specialist's
+own `threat_model` / `code_review` output is saved as its own
+`report-<ts>-<agent>.md` (not just folded into the consolidated report), so a
+later `phrak report` quotes them instead of showing placeholders.
+
+The report is honest about gaps. If `threat_model` has genuinely never been run,
+the section says so and names the command to fix it, rather than quietly omitting
+a heading; and if the model is unreachable, the summary is replaced by a factual
 stub while every assembled section survives intact.
 
 `generate_report` is excluded from the orchestrator's planner, so `phrak run`
@@ -500,6 +513,13 @@ flowchart TD
    **separates confirmed findings from hypotheses, preserves disagreement**
    between agents, and adds a coverage & limitations section (including any failed
    or skipped task), saved to `.phrack/reports/`.
+6. **Coverage reconciliation.** Because findings can be salvaged only at synthesis
+   — after `test_case` has already run — the orchestrator finally ties the two
+   together (`appsec/coverage.py`): each test case is linked to the finding it
+   clearly verifies (unambiguous title-token overlap only, never a guess), and
+   **every finding still without a linked test case — including unconfirmed ones —
+   gets a minimal, finding-linked verification test case**. It's idempotent, so a
+   finding already covered is never re-linked or duplicated.
 
 ### Surviving weaker local models
 
@@ -1032,6 +1052,7 @@ appsec/
   orchestrator.py   planner/router + DAG execution (parallel fan-out) + synthesis
                     + salvage of findings/test cases from the consolidated report
   extract.py        deterministic findings/test-case extraction from a prose report
+  coverage.py       link test cases to findings + backfill a test case per finding
   chat.py           conversational session (multi-turn, tool use, thread memory)
   repl.py           chat REPL helpers (readline autocomplete/history, grouped /help)
   llm.py            chat-model factory (ollama | anthropic) + model registry
