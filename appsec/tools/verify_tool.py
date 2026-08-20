@@ -200,6 +200,76 @@ def run_poc_sandboxed(
     )
 
 
+# How a PoC outcome maps onto the finding's runtime status track. "inconclusive"
+# deliberately changes no status — it records a note and leaves the static
+# verdict standing (the bug may still be real; the PoC just couldn't show it).
+_OUTCOME_STATUS = {"confirmed": "confirmed", "false_positive": "false_positive"}
+
+
+@tool
+def record_poc_result(
+    finding_id: str,
+    outcome: str,
+    note: str = "",
+    poc: str = "",
+) -> str:
+    """Record a sandboxed PoC's verdict against an existing finding, promoting (or
+    refuting) it on the RUNTIME status track.
+
+    Call this once per finding you attempted, AFTER run_poc, using the finding id
+    (``FND-...``) from the code_review context. ``outcome`` is one of:
+      * ``confirmed``       — the PoC demonstrated the vulnerability (row leak,
+                              canary side-effect, marker string, /etc/passwd read).
+      * ``false_positive``  — the PoC did not land after a retry; the finding is
+                              not runtime-reproducible as written.
+      * ``inconclusive``    — needs a full app stack / out of scope for a one-shot
+                              PoC; leaves the static verdict standing.
+    ``note`` explains what the PoC showed (or why it didn't); ``poc`` is the script
+    you ran, kept on the finding's history. The runtime track has precedence over
+    the reporting agent's status but not over a human triage decision."""
+    outcome = (outcome or "").strip().lower()
+    if outcome not in ("confirmed", "false_positive", "inconclusive"):
+        return (
+            f"REJECTED: outcome {outcome!r} is not one of confirmed / "
+            "false_positive / inconclusive."
+        )
+    from ..store import FindingStore
+
+    store = FindingStore(require_config())
+    detail = " ".join(p for p in (note.strip(), _poc_tail(poc)) if p).strip()
+    if outcome == "inconclusive":
+        rec, msg = store.add_note(
+            finding_id, f"runtime PoC inconclusive: {detail or 'no detail given'}"
+        )
+        if rec is None:
+            return f"NOT RECORDED — {msg}. Use the finding id from your context."
+        return f"RECORDED inconclusive on {rec.id} (status unchanged; noted)."
+
+    status = _OUTCOME_STATUS[outcome]
+    # A landed PoC is the strongest evidence there is, so it raises confidence; a
+    # non-landing one leaves confidence to the static analysis that reported it.
+    conf = 0.95 if outcome == "confirmed" else None
+    rec, msg = store.set_status(
+        finding_id,
+        status,
+        actor="runtime",
+        note=f"sandboxed PoC: {detail or outcome}",
+        confidence=conf,
+    )
+    if rec is None:
+        return f"NOT RECORDED — {msg}. Use the finding id shown in your context."
+    return f"RECORDED runtime verdict — {msg}."
+
+
+def _poc_tail(poc: str) -> str:
+    """A short, single-line tag of the PoC script for the history note."""
+    poc = (poc or "").strip()
+    if not poc:
+        return ""
+    first = poc.splitlines()[0][:80]
+    return f"(poc: {first}…)" if len(poc) > 80 else f"(poc: {first})"
+
+
 @tool
 def run_poc(script: str, kind: str = "python", mount_workspace: bool = False) -> str:
     """Run a short PoC script inside a locked-down container to verify a finding.
@@ -220,4 +290,6 @@ def run_poc(script: str, kind: str = "python", mount_workspace: bool = False) ->
 
 def verify_tools(config) -> list:
     """Only exposed when enable_verify is set. Off-by-default posture."""
-    return [run_poc] if getattr(config, "enable_verify", False) else []
+    if not getattr(config, "enable_verify", False):
+        return []
+    return [run_poc, record_poc_result]

@@ -38,7 +38,7 @@ system you are authorised to test.
 | PHRAK does | PHRAK does not |
 |------------|----------------|
 | Read source, config, and dependency manifests | Send a single request to a live target |
-| Trace taint from source to sink (Opengrep) | Run an exploit against a deployed app |
+| Trace taint from source to sink (OpenGrep) | Run an exploit against a deployed app |
 | Model threats and attack paths against real components | Spider, fuzz, or scan a host |
 | Keep a durable findings backlog you triage | Decide for you whether a bug is real |
 | Author a manual test plan and track your progress | **Execute** those tests |
@@ -51,7 +51,7 @@ whether a finding is actually exploitable. It is off by default.
 
 Runs **fully offline on a local Ollama model** by default, or on **Claude via
 the Anthropic API** if you opt in at setup. **PHRAK does not use Nuclei** (or
-Semgrep/CodeQL/Joern — Opengrep is the sole static analyzer).
+CodeQL/Joern — OpenGrep is the sole static analyzer).
 
 Everything a run produces stays on your machine, inside a per-workspace
 `.phrack/` directory (like `.claude`).
@@ -76,7 +76,7 @@ execute them. Step 5 assembles everything into a single report.
 
 | Agent | Role |
 |-------|------|
-| `code_review` | Finds vulnerabilities in source (OWASP/CWE) with `file:line` findings, exploitability reasoning, and fixes. Uses **Opengrep in taint mode** (source→sink dataflow traces for SQLi, cmd-injection, path traversal, SSRF, deserialization) as its confirmed-lead source, **Opengrep pattern scan** + **secret scanning** as unconfirmed leads, then verifies each in source, and records validated structured findings. Also has **semantic `rag_search`** for finding sibling instances of a bug pattern. |
+| `code_review` | Finds vulnerabilities in source (OWASP/CWE) with `file:line` findings, exploitability reasoning, and fixes. Uses **OpenGrep in taint mode** (source→sink dataflow traces for SQLi, cmd-injection, path traversal, SSRF, deserialization) as its confirmed-lead source, **OpenGrep pattern scan** + **secret scanning** as unconfirmed leads, then verifies each in source, and records validated structured findings. Also has **semantic `rag_search`** for finding sibling instances of a bug pattern. |
 | `threat_model` | STRIDE/PASTA threat model: components, trust boundaries, data flows, per-threat table, and prioritized attack paths, tied to real components in the code. |
 | `test_case` | Reads the source (and the `code_review` findings + `threat_model` threats fed forward) and turns them into a **prioritized list of concrete security test cases** — each with a target, steps, and an expected result — for you to work through manually. Each is recorded in a trackable [backlog](#test-cases). **PHRAK does not run the tests**; it produces the checklist. |
 | `generate_report` | Assembles the whole engagement into one deliverable: executive summary, threat model, code review, findings, and every test case. Its body is **quoted verbatim** from the runs and stores that produced it — only the executive summary is model-written. See [The final report](#the-final-report-generate_report). |
@@ -101,7 +101,7 @@ ollama pull qwen2.5-coder:7b
 
 Requires [Ollama](https://ollama.com) with a tool-capable model (default
 `qwen2.5-coder:7b`) — unless you choose the Anthropic provider, which needs only
-an API key. Optionally install [Opengrep](https://opengrep.dev) for
+an API key. Optionally install [OpenGrep](https://opengrep.dev) for
 static-analysis leads (PHRAK degrades gracefully without it).
 
 ## Configure — `phrak config`
@@ -492,7 +492,10 @@ flowchart TD
    the terminal (see [Live activity output](#live-activity-output)).
 4. **Findings feed forward** to dependent tasks (e.g. `code_review` +
    `threat_model` → `test_case`) and are **persisted** to the cross-run history
-   store.
+   store. If the agents recorded nothing structured this run (a weak model that
+   only wrote prose), the orchestrator salvages findings and test cases out of the
+   consolidated report itself — see
+   [Findings and test cases are captured even when the model won't](#findings-and-test-cases-are-captured-even-when-the-model-wont).
 5. **Synthesis.** The orchestrator merges outputs into one report that
    **separates confirmed findings from hypotheses, preserves disagreement**
    between agents, and adds a coverage & limitations section (including any failed
@@ -526,22 +529,52 @@ It stays a *compensating control for weak models*, not a security boundary: the
 real boundaries are the read-only tool set and the workspace sandbox.
 `tests/test_middleware_injection.py` pins each rule.
 
-## Static analyzer: Opengrep
+### Findings and test cases are captured even when the model won't
 
-`code_review` runs **Opengrep** as its deterministic lead source, then verifies
+A small model reliably *writes* a structured report but unreliably *calls* the
+`report_finding` / `report_test_case` capture tools — so the prose report is full
+of issues while `/findings` and `/testcases` stay empty. PHRAK defends that gap in
+three escalating layers, so the backlog is populated regardless of how
+cooperative the model is:
+
+1. **Record-as-you-go.** The agents are prompted to capture each item the moment
+   they confirm it, one at a time, rather than batching to the end of a run.
+2. **A guaranteed recording pass.** If an agent finishes with a full report but an
+   empty store, it gets one focused turn that feeds the report back and asks it to
+   call the capture tool for each item — transcribing a report it already wrote is
+   a far easier task than the original review.
+3. **Deterministic extraction (`appsec/extract.py`).** If the store is *still*
+   empty, PHRAK parses the report text itself — no model, no tools — into the same
+   validated `SecurityFinding` / `SecurityTestCase` objects, grounding each
+   against the workspace (an item whose `file:line` can't be located is recorded
+   `unconfirmed`, exactly as the capture tool would). At the pipeline level the
+   orchestrator does the same salvage on the *consolidated* report, but only for a
+   track the agents left empty this run — so precise agent-recorded items are never
+   shadowed by vaguer salvaged ones.
+
+The extractor is conservative: a block is only recorded when it carries the
+attributes that define a real finding/test case, so remediation-roadmap items and
+bare headings are skipped rather than stored as empty records.
+`tests/test_extract.py` pins it against the exact report shapes
+`qwen2.5-coder:7b` produces.
+
+## Static analyzer: OpenGrep
+
+`code_review` runs **OpenGrep** as its deterministic lead source, then verifies
 every hit by reading the code:
 
-- **`opengrep_taint_scan`** — Opengrep in **taint mode** with PHRAK's own bundled
+- **`opengrep_taint_scan`** — OpenGrep in **taint mode** with PHRAK's own bundled
   ruleset (`appsec/analyzers/rules/taint/`), tracing source→sink dataflow rather
   than matching a pattern in isolation. These are the **confirmed leads**: a hit
   carries an actual path from untrusted input to a dangerous sink.
 - **`opengrep_scan`** — fast pattern-based rules across many languages
   (`--config auto` by default). Returns `file:line [severity] rule -> message`.
   Pattern hits are **unconfirmed leads** to verify in source.
-- **`scan_secrets`** — Opengrep's secrets ruleset, for hardcoded credentials/keys.
+- **`scan_secrets`** — OpenGrep's secrets ruleset, for hardcoded credentials/keys.
 
-[Opengrep](https://opengrep.dev) is the open-source (LGPL) fork of Semgrep OSS:
-the same `scan` subcommand and JSON output, but with no telemetry and no login.
+[OpenGrep](https://opengrep.dev) is an open-source (LGPL) static-analysis engine
+driven by a familiar `scan` subcommand with JSON output — and with no telemetry,
+no login, and no account required.
 
 **Bundled taint-rule coverage is deliberately narrow** — hand-written rules that
 hold up, not breadth:
@@ -557,13 +590,13 @@ rules and the agent's own source reading are the fallback, and both produce
 without a supporting taint path**, a SQLi in Ruby or Java will surface as a lead
 and stay one. Point `--config` at your own rules to extend this.
 
-Opengrep is PHRAK's **sole** static analyzer — the earlier Semgrep/CodeQL/Joern
-setup (and the bespoke Python taint engine before it) has been removed. The tool
+OpenGrep is PHRAK's **sole** static analyzer — the earlier CodeQL/Joern setup
+(and the bespoke Python taint engine before it) has been removed. The tool
 is **optional and degrades gracefully**: if the binary isn't on PATH it returns an
 install hint instead of failing the run. Findings are **leads**, not confirmed
 vulnerabilities — the agent confirms each by reading the surrounding code.
 
-### Installing Opengrep
+### Installing OpenGrep
 
 ```bash
 # Linux/macOS — official installer puts `opengrep` on PATH:
@@ -583,7 +616,7 @@ Analyzer output isn't left as opaque text. Each analyzer is an **`AnalyzerAdapte
 `SecurityFinding` objects an agent reports by hand, so they run through one
 `validate → ground → dedupe` pipeline and render together:
 
-- **`analyzer_scan`** — runs Opengrep and records each hit as a workspace-grounded,
+- **`analyzer_scan`** — runs OpenGrep and records each hit as a workspace-grounded,
   `unconfirmed` finding (a lead to verify), deduped with anything you later confirm.
 - **`dependency_audit`** — audits dependency manifests for **known-vulnerable
   versions** via `pip-audit` / `npm audit` / `govulncheck` / `cargo audit` (per
@@ -929,7 +962,7 @@ pytest tests/test_store.py    # one module
 
 The bench is **offline by design** — no test reaches the network or a live
 model. Providers are faked (`tests/conftest.py::FakeLLM`), external CLIs
-(Opengrep, `pip-audit`, the container runtime) are mocked, and every fixture
+(OpenGrep, `pip-audit`, the container runtime) are mocked, and every fixture
 writes into a `tmp_path` workspace, so nothing touches your real `.phrack/`.
 
 An `integration` marker is registered in `pyproject.toml` for tests that need a
@@ -947,7 +980,7 @@ PHRAK was built incrementally on one architecture. All landed work:
 - **Security test cases** — a read-only test-case agent that turns findings and
   threats into a prioritized, traceable manual test plan (no live testing / no
   target traffic).
-- **Opengrep** as the sole static analyzer + analyzer→finding normalization,
+- **OpenGrep** as the sole static analyzer + analyzer→finding normalization,
   dependency audit (pip/npm/go/cargo), and a context-sensitive sanitizer table.
 - **History & scope** — persistent cross-run finding/taint history with separate
   agent/runtime/human status tracks, and a declarative scope policy
@@ -955,7 +988,7 @@ PHRAK was built incrementally on one architecture. All landed work:
 - **DAG orchestration** — dependency-graph planning with bounded parallel
   fan-out and partial-failure isolation, and a disagreement-preserving
   synthesizer.
-- **Taint mode** — bundled Opengrep dataflow rules (Python, JS/TS) as the
+- **Taint mode** — bundled OpenGrep dataflow rules (Python, JS/TS) as the
   confirmed-lead source, gating `confirmed` status on a real source→sink path,
   plus semantic `rag_search` for finding sibling instances of a bug pattern.
 - **Runtime verification** — the opt-in `verify` agent, proving exploitability
@@ -1004,7 +1037,7 @@ appsec/
   agents/           code_review, threat_model, test_case, generate_report,
                     verify (opt-in)
   analyzers/        AnalyzerAdapter base + opengrep, dependencies, sanitizers
-                    rules/taint/   bundled Opengrep taint rules (python, javascript)
+                    rules/taint/   bundled OpenGrep taint rules (python, javascript)
   tools/            common (sandbox/subprocess/loopback+SSRF guard), filesystem,
                     analysis, opengrep_tools, analyzer_tools, findings_tool,
                     rag_tool (semantic search), testcase_tool, clone_tool,
@@ -1025,7 +1058,7 @@ tests/              pytest bench (unit + marker-gated integration)
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) — dev setup, the `black` / `ruff` style
 rules, the mandatory module-header docstring, and the architecture invariants a
-PR must not break (read-only agents, no network without opt-in, Opengrep as the
+PR must not break (read-only agents, no network without opt-in, OpenGrep as the
 sole static analyzer). False positives and missed findings belong in a normal
 issue; vulnerabilities in PHRAK itself go to [`SECURITY.md`](SECURITY.md).
 
