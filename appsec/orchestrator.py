@@ -474,6 +474,15 @@ class Orchestrator:
         import concurrent.futures as cf
         import threading
 
+        from .store import FindingStore, TestCaseStore
+
+        # Snapshot the durable stores so we can tell whether the agents recorded
+        # anything THIS run. If they did, we trust their precise items; if they
+        # didn't (a weak model that only wrote prose), we salvage the findings
+        # and test cases out of the synthesized report below.
+        n_find_before = len(FindingStore(self.config).list())
+        n_tc_before = len(TestCaseStore(self.config).list())
+
         by_id = {t.id: t for t in tasks}
         max_workers = max(
             1, getattr(getattr(self.config, "orchestrator", None), "max_concurrency", 3)
@@ -577,6 +586,11 @@ class Orchestrator:
             for t in tasks
         ]
         report = self._synthesize(request, tasks)
+        self._salvage_from_report(
+            report,
+            recover_findings=len(FindingStore(self.config).list()) == n_find_before,
+            recover_test_cases=len(TestCaseStore(self.config).list()) == n_tc_before,
+        )
         report_path = self._save_report(request, tasks, outputs, report)
         return {
             "plan": tasks,
@@ -618,6 +632,64 @@ class Orchestrator:
             return message_text(self.llm.invoke(prompt))
         except Exception as e:
             return joined + f"\n\n[synthesis failed: {e}]"
+
+    def _salvage_from_report(
+        self,
+        report: str,
+        recover_findings: bool,
+        recover_test_cases: bool,
+    ) -> None:
+        """Populate the stores from the consolidated report when the agents didn't.
+
+        On a weak local model an agent can produce only a prose report and record
+        nothing structured — yet the synthesized report is full of concrete
+        findings and test cases. Rather than leave /findings and /testcases empty,
+        parse them deterministically out of the report text. Only runs for a track
+        the agents left empty this run, so precise agent-recorded items are never
+        shadowed by vaguer salvaged ones.
+        """
+        if not report or not (recover_findings or recover_test_cases):
+            return
+        from . import extract
+        from .banner import GREY, RESET
+        from .store import FindingStore, TaintStore, TestCaseStore
+        from .tools.common import workspace
+
+        try:
+            ws = workspace()
+        except Exception:
+            ws = None
+        n_f = n_t = 0
+        try:
+            if recover_findings:
+                findings = extract.findings_from_report(
+                    report, source_agent="synthesis", workspace=ws
+                )
+                if findings:
+                    FindingStore(self.config).upsert(findings, run_id="synthesis")
+                    TaintStore(self.config).upsert(findings, run_id="synthesis")
+                    n_f = len(findings)
+            if recover_test_cases:
+                cases = extract.test_cases_from_report(report, source_agent="synthesis")
+                if cases:
+                    TestCaseStore(self.config).upsert(cases)
+                    n_t = len(cases)
+        except Exception as e:  # salvage is best-effort, never fails the run
+            print(f"  {GREY}(could not salvage items from report: {e}){RESET}")
+            return
+        if n_f or n_t:
+            got = ", ".join(
+                p
+                for p in (
+                    f"{n_f} finding(s)" if n_f else "",
+                    f"{n_t} test case(s)" if n_t else "",
+                )
+                if p
+            )
+            print(
+                f"  {GREY}salvaged {got} from the consolidated report "
+                f"(agents recorded none){RESET}"
+            )
 
     def _save_report(
         self, request: str, plan: list[Step], outputs: list[dict], report: str

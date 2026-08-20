@@ -392,6 +392,51 @@ class Agent:
         self._drive(graph, prompt, {**cfg, "recursion_limit": self._RECORD_STEPS})
         self._budget_exhausted = False  # this pass may exhaust its own small budget
 
+        # A weak local model may STILL not have emitted the tool calls (it just
+        # replies "DONE"). Rather than depend on it, parse the report it already
+        # wrote into structured items deterministically. This is the reliable
+        # backstop that finally populates /findings and /testcases.
+        if not peek_findings() and not peek_test_cases():
+            self._record_from_prose(answer)
+
+    def _record_from_prose(self, answer: str) -> None:
+        """Deterministically extract findings / test cases from the prose report.
+
+        No model call, no tools — parses the text the agent already produced. The
+        last line of defence for models that never emit capture calls at all.
+        """
+        from . import extract
+        from .runtime import record_finding, record_test_case
+        from .tools.common import workspace
+
+        recorders = self._recording_tools()
+        n_f = n_t = 0
+        if "report_finding" in recorders:
+            for f in extract.findings_from_report(
+                answer, source_agent=self.spec.name, workspace=workspace()
+            ):
+                if record_finding(f):
+                    n_f += 1
+        if "report_test_case" in recorders:
+            for tc in extract.test_cases_from_report(
+                answer, source_agent=self.spec.name
+            ):
+                if record_test_case(tc):
+                    n_t += 1
+        if n_f or n_t:
+            got = ", ".join(
+                p
+                for p in (
+                    f"{n_f} finding(s)" if n_f else "",
+                    f"{n_t} test case(s)" if n_t else "",
+                )
+                if p
+            )
+            self._note(
+                f"{self.spec.name}: recovered {got} from the report text "
+                "(model did not record them)"
+            )
+
     def _wrap_up_if_exhausted(self, graph, cfg: dict, answer: str) -> str:
         """Ask for a write-up when a turn died on the step budget.
 

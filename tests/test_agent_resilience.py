@@ -224,6 +224,38 @@ def test_unrecorded_report_triggers_a_recording_pass(recording_agent, runtime):
     assert "Structured Findings" in out and "SQLi" in out
 
 
+def test_prose_report_is_salvaged_when_model_never_records(recording_agent, runtime):
+    """The real-world case: the model writes a structured report but never calls
+    report_finding, and even the transcription pass just replies DONE. The
+    deterministic extractor must still populate the store from the prose."""
+    report = (
+        "## Summary\nTwo issues found.\n\n"
+        "Finding 1: SQL Injection in login\n\n"
+        "Title: SQL Injection in login\n"
+        "Category: a03-injection\n"
+        "Severity: High\n"
+        "Description: Unsanitized username reaches the query.\n"
+        "File: vuln_app.py\n"
+        "Line: 11\n"
+    )
+    recording_agent.graph = RecordingGraph(
+        [
+            ("text", report),  # complete report, no report_finding call
+            ("text", "DONE"),  # transcription pass records nothing either
+        ]
+    )
+    out = recording_agent.run("review the app")
+
+    from appsec.runtime import RUNTIME
+    from appsec.store import FindingStore
+
+    recorded = FindingStore(RUNTIME.config).list()
+    assert len(recorded) == 1
+    assert "SQL Injection in login" in recorded[0].finding["title"]
+    # and it made it into the rendered report's structured section
+    assert "Structured Findings" in out
+
+
 def test_already_recorded_skips_the_recording_pass(recording_agent, runtime):
     """If the model recorded as it went, no redundant transcription pass runs."""
     recording_agent.graph = RecordingGraph(
