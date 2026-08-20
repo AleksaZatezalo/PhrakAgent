@@ -15,6 +15,7 @@ def command_names(app) -> list[str]:
         "help",
         "agents",
         "ask",
+        "index",
         "run",
         "route",
         "findings",
@@ -118,6 +119,7 @@ def chat_help(app) -> None:
             "analyze",
             [
                 ("/ask <text>", "answer a question grounded in the codebase (RAG)"),
+                ("/index [--rebuild|--stats]", "refresh the code index (no AI)"),
                 ("/run <text>", "full multi-agent assessment + saved report"),
                 ("/route <text>", "auto-route to the single best-fit agent"),
             ],

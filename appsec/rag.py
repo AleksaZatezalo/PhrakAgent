@@ -267,6 +267,39 @@ class CodeIndex:
                 "chunks": chunks,
             }
 
+    def stats(self) -> dict:
+        """What's in the index vs. what's on disk, without changing anything.
+
+        ``pending`` is how many files a sync would have to embed — the number
+        that decides whether the next ``/ask`` or ``rag_search`` is instant or
+        takes minutes.
+        """
+        indexed = self._indexed_mtimes()
+        seen: set[str] = set()
+        new = changed = 0
+        for fp in self._iter_files():
+            rel = self._rel(fp)
+            seen.add(rel)
+            try:
+                mtime = fp.stat().st_mtime
+            except OSError:
+                continue
+            prior = indexed.get(rel)
+            if prior is None:
+                new += 1
+            elif abs(float(prior) - mtime) > 1e-6:
+                changed += 1
+        orphaned = sum(1 for rel in indexed if rel not in seen)
+        return {
+            "chunks": self.count(),
+            "indexed_files": len(indexed),
+            "workspace_files": len(seen),
+            "new": new,
+            "changed": changed,
+            "orphaned": orphaned,
+            "pending": new + changed + orphaned,
+        }
+
     def sync_once(self, on_progress=None) -> dict:
         """Sync at most once per process; a no-op on every later call.
 
@@ -299,15 +332,22 @@ class CodeIndex:
         self._delete_path(rel)  # drop chunks from any previous version
         return self._add_file(fp, rel, mtime)
 
-    def reindex(self) -> dict:
-        """Wipe and rebuild the whole index from scratch."""
-        try:
-            ids = self.store.get().get("ids", [])
-            if ids:
-                self.store.delete(ids=ids)
-        except Exception:
-            pass
-        return self.sync()
+    def reindex(self, on_progress=None) -> dict:
+        """Wipe and rebuild the whole index from scratch.
+
+        Every file is re-embedded, so this is the slow path — reach for it when
+        the index itself is suspect (changed chunk size or embeddings model, a
+        corrupted store), not for ordinary edits, which :meth:`sync` handles
+        incrementally.
+        """
+        with self._sync_lock:
+            try:
+                ids = self.store.get().get("ids", [])
+                if ids:
+                    self.store.delete(ids=ids)
+            except Exception:
+                pass
+            return self.sync(on_progress=on_progress)
 
     # ------------------------------------------------------------- retrieve
     def search(self, query: str, k: Optional[int] = None) -> list[tuple[str, str]]:

@@ -17,6 +17,8 @@ from .banner import (
     GREEN,
     GREY,
     RESET,
+    WHITE,
+    YELLOW,
     mini_banner,
     phrak_print,
     print_banner,
@@ -27,7 +29,7 @@ from .config import (
     default_config_path,
     run_setup,
 )
-from .ui import render_markdown
+from .ui import Spinner, render_markdown
 
 
 def _config_path(args) -> str:
@@ -200,20 +202,22 @@ def _do_ask(app, question: str, reindex: bool = False, k=None) -> None:
     keeps the wait visible (embedding a big workspace is not instant) and lets
     ``ask`` skip a second redundant walk.
     """
-    from .ui import Spinner
+    spinner = Spinner("syncing code index")
+
+    def _progress(done, total, rel):
+        # Embedding is CPU-bound (minutes for a few hundred files) — show the
+        # count so a first index reads as work, not as a freeze.
+        spinner.set_label(f"{'rebuilding' if reindex else 'indexing'} {done}/{total}")
 
     if reindex:
         phrak_print("reindexing workspace ...")
-        stats = app.rag.reindex()
+        spinner.start()
+        try:
+            stats = app.rag.reindex(on_progress=_progress)
+        finally:
+            spinner.stop()
         phrak_print(f"indexed {stats['chunks']} chunks from {stats['added']} files")
     else:
-        spinner = Spinner("syncing code index")
-
-        def _progress(done, total, rel):
-            # Embedding is CPU-bound (minutes for a few hundred files) — show
-            # the count so a first index reads as work, not as a freeze.
-            spinner.set_label(f"indexing workspace {done}/{total}")
-
         spinner.start()
         try:
             stats = app.rag.sync(on_progress=_progress)
@@ -390,6 +394,48 @@ def cmd_chat(args) -> int:
                     phrak_print("cancelled — nothing recorded.")
                 else:
                     phrak_print(add_manual_finding(app, **fields))
+            elif cmd == "index":
+                toks = rest.split()
+                if "--stats" in toks:
+                    s = app.rag.stats()
+                    phrak_print(
+                        f"index :: {WHITE}{s['chunks']}{RESET} chunk(s) from "
+                        f"{WHITE}{s['indexed_files']}{RESET} file(s); "
+                        f"{WHITE}{s['pending']}{RESET} pending"
+                    )
+                    continue
+                rebuild = "--rebuild" in toks
+                spinner = Spinner("rebuilding index" if rebuild else "indexing")
+                label = "rebuilding index" if rebuild else "indexing workspace"
+                spinner.start()
+                try:
+                    stats = (
+                        app.rag.reindex(
+                            on_progress=lambda d, t, r: spinner.set_label(
+                                f"{label} {d}/{t}"
+                            )
+                        )
+                        if rebuild
+                        else app.rag.sync(
+                            on_progress=lambda d, t, r: spinner.set_label(
+                                f"{label} {d}/{t}"
+                            )
+                        )
+                    )
+                except Exception as e:
+                    spinner.stop()
+                    phrak_print(f"index failed :: {e}")
+                    continue
+                finally:
+                    spinner.stop()
+                touched = stats["added"] + stats["updated"] + stats["removed"]
+                if touched:
+                    phrak_print(
+                        f"indexed {WHITE}{stats['chunks']}{RESET} chunk(s) :: "
+                        f"+{stats['added']} ~{stats['updated']} -{stats['removed']}"
+                    )
+                else:
+                    phrak_print(f"{GREEN}already up to date{RESET}")
             elif cmd == "testcases":
                 from .testcase_cmds import parse_testcase_flags, test_cases_list
 
@@ -503,6 +549,96 @@ def cmd_findings(args) -> int:
             resurfaced=args.resurfaced,
         )
     )
+    return 0
+
+
+def cmd_index(args) -> int:
+    """Build or refresh the code index — no AI, no model, no network.
+
+    Embedding is local and CPU-bound: a few hundred files takes minutes. Doing
+    it here, deliberately, is what keeps it from happening inside an agent's
+    tool call mid-assessment.
+    """
+    import time
+
+    path = _config_path(args)
+    _ensure_config(path)
+    cfg = Config.load(path)
+    if args.workspace:
+        cfg.paths.workspace = args.workspace
+    cfg.ensure_dirs()
+
+    from .rag import CodeIndex
+
+    idx = CodeIndex(cfg)
+    quiet = getattr(args, "quiet", False)
+    as_json = getattr(args, "json", False)
+    if not quiet and not as_json:
+        print(mini_banner())
+
+    # --stats reports and changes nothing.
+    if args.stats:
+        s = idx.stats()
+        if as_json:
+            import json
+
+            print(json.dumps(s, indent=2))
+            return 0
+        phrak_print(
+            f"index :: {WHITE}{s['chunks']}{RESET} chunk(s) from "
+            f"{WHITE}{s['indexed_files']}{RESET} file(s) :: {CYAN}{cfg.rag_dir()}{RESET}"
+        )
+        phrak_print(
+            f"workspace :: {WHITE}{s['workspace_files']}{RESET} indexable file(s)"
+        )
+        if s["pending"]:
+            phrak_print(
+                f"{YELLOW}{s['pending']} file(s) pending{RESET} "
+                f"{GREY}({s['new']} new, {s['changed']} changed, "
+                f"{s['orphaned']} removed) — run `phrak index`{RESET}"
+            )
+        else:
+            phrak_print(f"{GREEN}up to date{RESET} {GREY}— nothing to do{RESET}")
+        return 0
+
+    spinner = Spinner("preparing")
+    label = "rebuilding index" if args.rebuild else "indexing workspace"
+
+    def _progress(done, total, rel):
+        spinner.set_label(f"{label} {done}/{total}")
+
+    started = time.time()
+    if not quiet and not as_json:
+        spinner.start()
+    try:
+        if args.rebuild:
+            stats = idx.reindex(on_progress=_progress)
+        else:
+            stats = idx.sync(on_progress=_progress)
+    except Exception as e:
+        spinner.stop()
+        print(f"error: could not index the workspace: {e}", file=sys.stderr)
+        return 1
+    finally:
+        spinner.stop()
+    elapsed = time.time() - started
+
+    if as_json:
+        import json
+
+        print(json.dumps({**stats, "seconds": round(elapsed, 2)}, indent=2))
+        return 0
+    touched = stats["added"] + stats["updated"] + stats["removed"]
+    if touched:
+        phrak_print(
+            f"indexed {WHITE}{stats['chunks']}{RESET} chunk(s) :: "
+            f"+{stats['added']} new, ~{stats['updated']} changed, "
+            f"-{stats['removed']} removed {GREY}({elapsed:.1f}s){RESET}"
+        )
+    else:
+        phrak_print(f"{GREEN}already up to date{RESET} {GREY}({elapsed:.1f}s){RESET}")
+    if not quiet:
+        phrak_print(f"{GREY}index :: {cfg.rag_dir()}{RESET}")
     return 0
 
 
@@ -718,6 +854,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="only findings whose evidence changed since a human verdict",
     )
     sp.set_defaults(func=cmd_findings)
+
+    sp = sub.add_parser(
+        "index",
+        help="build or refresh the code index (no AI) so /ask and agents are fast",
+    )
+    sp.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="wipe and re-embed everything (slow; for a changed chunk size or model)",
+    )
+    sp.add_argument(
+        "--stats",
+        action="store_true",
+        help="report what's indexed and what's pending, without changing anything",
+    )
+    sp.set_defaults(func=cmd_index)
 
     sp = sub.add_parser(
         "report",

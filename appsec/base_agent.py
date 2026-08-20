@@ -240,7 +240,7 @@ class Agent:
                     "as needed, then output the COMPLETE final report containing "
                     "ALL required sections. Do not stop until every section is "
                     "present. NEVER ask the user to paste code — read it "
-                    "yourself with read_file."
+                    "yourself with read_file." + self._record_reminder()
                 )
                 answer = self._best(self._drive(graph, cont, cfg), answer)
             answer = self._wrap_up_if_exhausted(graph, cfg, answer)
@@ -272,17 +272,79 @@ class Agent:
         "leaving it out."
     )
 
+    # Structured-capture tools. Unlike every other tool these write nothing to
+    # the model's context and read nothing from disk — they only persist what the
+    # model has already established — so they stay allowed after the exploration
+    # budget is gone.
+    _RECORDING_TOOLS = ("report_finding", "report_test_case")
+
+    # One step per recorded item, so this has to fit a real backlog rather than
+    # the odd stray call the write-up round allows for.
+    _RECORD_STEPS = 24
+
+    def _recording_tools(self) -> list[str]:
+        return [t.name for t in self.tools if t.name in self._RECORDING_TOOLS]
+
+    def _record_reminder(self) -> str:
+        """A nudge to record anything confirmed since the last capture call.
+
+        Appended to mid-run continuation prompts. By this point the model is
+        several rounds deep and drifting toward prose; without it, items it
+        confirmed after its last capture call tend to reach only the report.
+        """
+        names = self._recording_tools()
+        if not names:
+            return ""
+        listed = " / ".join(names)
+        return (
+            f" Before continuing, call {listed} for anything you have confirmed "
+            "since your last one — items only described in prose are not "
+            "recorded."
+        )
+
+    def _record_before_writeup(self, graph, cfg: dict) -> None:
+        """Persist confirmed items before the tool-free write-up round.
+
+        On a large workspace an agent routinely spends its whole step budget
+        exploring, and the write-up prompt then tells it to stop calling tools —
+        which silently includes ``report_finding`` / ``report_test_case``. The
+        prose report would describe a dozen vulnerabilities while the stores
+        behind ``/findings``, ``/testcases`` and ``generate_report`` stayed
+        empty. This round is the one chance to close that gap.
+        """
+        names = self._recording_tools()
+        if not names:
+            return  # e.g. threat_model, which records nothing structured
+        listed = " and ".join(f"`{n}`" for n in names)
+        self._note(f"{self.spec.name}: recording confirmed items before write-up")
+        prompt = (
+            "Your exploration budget is spent. Do NOT read, search, or scan "
+            "anything further — those tools will not run.\n\n"
+            f"Before writing the report, RECORD your results: call {listed} "
+            "once for each distinct item you have ALREADY confirmed by reading "
+            "the code. These are the only tool calls you may make now.\n\n"
+            "Anything you do not record here is absent from the operator's "
+            "backlog even if you describe it in the prose report, so record "
+            "every confirmed item, strongest first. Do not invent items you did "
+            "not verify. When you are done, reply with the single word DONE."
+        )
+        self._drive(graph, prompt, {**cfg, "recursion_limit": self._RECORD_STEPS})
+        # This turn's text is a bookkeeping acknowledgement, never a report — it
+        # is deliberately discarded so it cannot displace the real answer.
+        self._budget_exhausted = False
+
     def _wrap_up_if_exhausted(self, graph, cfg: dict, answer: str) -> str:
         """Ask for a write-up when a turn died on the step budget.
 
         Hitting ``max_steps`` used to raise straight out of the agent and fail
         the whole task, discarding every tool result the model had gathered. A
         model deep in a tool loop has usually seen enough to write *something*,
-        so it gets one short, tool-free turn to do that.
+        so it gets one short turn to record its findings and one to write up.
         """
         if not self._budget_exhausted:
             return answer
         self._note(f"{self.spec.name}: step budget spent — writing up what it has")
+        self._record_before_writeup(graph, cfg)
         wrap_cfg = {**cfg, "recursion_limit": self._FINALIZE_STEPS}
         answer = self._best(self._drive(graph, self._FINALIZE_PROMPT, wrap_cfg), answer)
         self._budget_exhausted = False  # the wrap-up turn may exhaust its own
@@ -339,6 +401,15 @@ class Agent:
 
         findings = take_findings()
         if not findings:
+            # An agent that *can* record but didn't leaves /findings and
+            # generate_report empty while the prose report is full of
+            # vulnerabilities — say so, rather than letting the operator
+            # discover it later and conclude nothing was found.
+            if "report_finding" in self._recording_tools():
+                self._note(
+                    f"{self.spec.name}: no structured findings recorded — "
+                    "/findings will be empty for this run"
+                )
             return answer
         from .models.findings import dedupe_findings
 
@@ -386,6 +457,11 @@ class Agent:
 
         cases = take_test_cases()
         if not cases:
+            if "report_test_case" in self._recording_tools():
+                self._note(
+                    f"{self.spec.name}: no test cases recorded — "
+                    "/testcases will be empty for this run"
+                )
             return answer
         from .models.testcases import dedupe_test_cases
 
@@ -457,6 +533,9 @@ class Agent:
                 for _node, update in chunk.items():
                     for m in (update or {}).get("messages", []):
                         if isinstance(m, AIMessage):
+                            from .runtime import record_usage
+
+                            record_usage(m)  # so /cost sees agent runs too
                             for call in getattr(m, "tool_calls", None) or []:
                                 name = call.get("name")
                                 args = call.get("args", {})

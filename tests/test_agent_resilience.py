@@ -173,7 +173,7 @@ def test_all_failed_synthesis_names_the_errors(config):
             status="skipped",
         ),
     ]
-    out = orch._synthesize_dag("assess", tasks)
+    out = orch._synthesize("assess", tasks)
 
     assert "Recursion limit of 40 reached" in out
     assert "t2" in out and "skipped" in out

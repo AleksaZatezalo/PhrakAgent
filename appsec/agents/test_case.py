@@ -53,10 +53,21 @@ Workflow — do the WHOLE plan in one pass, never stop to ask the user:
 3. WRITE each test case in the standard shape (security-test-case-design skill):
    a title, the linked finding/threat, the target (file:line / endpoint /
    parameter), preconditions, numbered steps, the EXPECTED result that proves
-   the issue present-or-absent, and a severity. Call report_test_case for each
-   one as you write it — the id is assigned for you, so do not invent your own.
+   the issue present-or-absent, and a severity. Call report_test_case the moment
+   each one is written, before you start the next. Work in this rhythm:
+
+       derive one test  →  report_test_case  →  derive the next
+
+   The id is assigned for you, so do not invent your own.
 4. PRIORITIZE — order the list by risk and note coverage/traceability so the
    operator knows which finding each test verifies (test-prioritization skill).
+
+RECORD AS YOU GO — DO NOT BATCH. Never save up test cases to report at the end.
+Your step budget is finite and a large codebase will exhaust it mid-plan: every
+test case you have not yet passed to report_test_case at that moment is missing
+from the operator's backlog, so they cannot mark it in progress or complete —
+even if you later write it out in prose. Prose is not a record. Six tests
+recorded one by one beat fifteen described and none recorded.
 
 IMPORTANT: actually CALL the tools — do not print tool calls or JSON as your
 answer. NEVER ask the user to paste code; read it yourself with read_file. Base

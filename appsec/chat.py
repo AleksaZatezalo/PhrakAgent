@@ -128,7 +128,16 @@ class ChatSession:
         return self.model_desc
 
     def cost_summary(self) -> str:
+        """Chat's own usage plus everything else this process has spent.
+
+        The process total matters more than the chat total: one ``/run`` costs
+        far more than a conversation, and reporting only chat turns made ``/cost``
+        read as 0 straight after a full multi-agent assessment.
+        """
+        from .runtime import usage_totals
+
         t = self.tokens
+        total = usage_totals()
         provider = self.app.config.llm.provider
         charge = (
             "$0.00 (local Ollama — no API charge)"
@@ -136,18 +145,25 @@ class ChatSession:
             else "provider-dependent"
         )
         return (
-            f"tokens this session — input: {t['input']}, output: {t['output']}, "
-            f"turns: {t['turns']}\nestimated spend: {charge}"
+            f"chat turns  — input: {t['input']}, output: {t['output']}, "
+            f"turns: {t['turns']}\n"
+            f"this session — input: {total['input']}, output: {total['output']}, "
+            f"model calls: {total['calls']}  "
+            f"(includes /run, agents and reports)\n"
+            f"estimated spend: {charge}"
         )
 
     def _account(self, msg) -> None:
         """Best-effort token accounting from provider metadata."""
+        from .runtime import record_usage
+
         um = getattr(msg, "usage_metadata", None) or {}
         meta = getattr(msg, "response_metadata", None) or {}
         inp = um.get("input_tokens") or meta.get("prompt_eval_count") or 0
         out = um.get("output_tokens") or meta.get("eval_count") or 0
         self.tokens["input"] += int(inp)
         self.tokens["output"] += int(out)
+        record_usage(msg)  # feed the process-wide total too
 
     def send(self, text: str) -> str:
         """Send one user turn, streaming tool activity, return the final reply."""

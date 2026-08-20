@@ -215,7 +215,8 @@ phrak run --single "review server.py" -w ./target             # route to one age
 phrak clone https://github.com/org/webapp -w ./ws  # clone a repo into the workspace to analyze
 phrak agent code_review "review for injection bugs" -w ./target
 phrak ask "how are sessions authenticated?" -w ./target       # RAG over the code
-phrak ask --reindex "..." -w ./target  # rebuild the code index before asking
+phrak index -w ./target                # build/refresh the code index (no AI)
+phrak index --stats -w ./target        # what's indexed, what's pending
 phrak agents                           # list agents (and the model each uses)
 phrak findings -w ./target             # every finding recorded so far
 phrak findings --severity high --resurfaced -w ./target   # filter the backlog
@@ -247,6 +248,7 @@ immediately; files outside the workspace are never inlined.
 | Command | What it does |
 |---------|--------------|
 | `/ask <text> [--reindex]` | Answer a question grounded in the codebase (RAG) |
+| `/index [--rebuild\|--stats]` | Build or refresh the code index — no AI |
 | `/run <text>` | Full multi-agent assessment + saved report |
 | `/route <text>` | Auto-route to the single best-fit agent |
 | `/code_review`, `/threat_model`, `/test_case` `<text>` | Run one agent directly |
@@ -795,25 +797,49 @@ retrieval is dense vector search over the local embeddings backend (`default`
 local ONNX or `ollama`). Tune the chunk size, `recall_k`, included extensions,
 and excluded dirs under `rag:` in config.
 
-**Keeping the index current.** The index is refreshed before every question —
-both on the `/ask` path and in the agents' `rag_search` tool — so a citation
-always reflects the code as it is now, not as it was when first indexed. The
+**Keeping the index current.** The index is refreshed before every question, so
+a citation reflects the code as it is now, not as it was when first indexed. The
 sync is **incremental**: files are keyed by mtime, so only what changed
-re-embeds and an untouched workspace costs a stat walk. Added files appear,
-edited files are re-chunked, and deleted files drop out.
+re-embeds. Added files appear, edited files are re-chunked, deleted files drop
+out, and an untouched workspace costs a stat walk.
 
 If the embeddings backend is unreachable, the answer is still produced from
 whatever is indexed — prefixed with an explicit staleness warning, never
 silently.
 
+### `phrak index` — do the embedding on your own schedule
+
+Embedding is **local and CPU-bound**: a few hundred files takes minutes. That
+cost has to be paid once, and `phrak index` is how you pay it deliberately
+rather than discovering it mid-assessment.
+
 ```bash
-phrak ask "…"                # syncs, then answers
-phrak ask --reindex "…"      # wipe and rebuild from scratch, then answer
-/ask --reindex <question>    # same, in chat
+phrak index                  # build or refresh — no AI, no model, no network
+phrak index --stats          # what's indexed and what's pending; changes nothing
+phrak index --rebuild        # wipe and re-embed everything (slow)
+phrak --json index           # machine-readable, for CI
 ```
 
-Reach for `--reindex` when the index itself is suspect (a changed chunk size or
-embeddings model, or a corrupted store) — routine edits don't need it.
+```
+[phrak] index :: 4359 chunk(s) from 742 file(s) :: .phrack/rag
+[phrak] workspace :: 742 indexable file(s)
+[phrak] up to date — nothing to do
+```
+
+Run it after `phrak clone`, or after a big refactor, and every later `/ask` and
+`rag_search` is instant. `/index` does the same thing inside a chat session.
+
+**Timing matters more than it looks.** The agents' `rag_search` tool refreshes
+the index at most **once per process**, serialized across the DAG's parallel
+agents — they cannot each embed the workspace, and an agent that arrives while
+one is indexing waits rather than duplicating the work. But that one refresh
+still happens inside a tool call. On a large, never-indexed workspace that is a
+multi-minute pause mid-run (with progress output, but still a pause). Indexing
+up front avoids it.
+
+Reach for `--rebuild` only when the index itself is suspect — a changed chunk
+size or embeddings model, or a corrupted store. Ordinary edits are handled
+incrementally.
 
 ## Live activity output
 

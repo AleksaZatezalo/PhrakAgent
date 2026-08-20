@@ -167,25 +167,7 @@ def _merge_outputs(sections: list[tuple[str, str]], budget: int) -> str:
     return "\n\n".join(f"### {sections[i][0]}\n{clipped[i]}" for i in order)
 
 
-_SYNTHESIS_PROMPT = """You are the lead application-security engineer. Combine
-the specialist agents' outputs below into one coherent report for the user.
-
-Deduplicate overlapping findings, resolve contradictions, and prioritize by
-risk. Structure: Executive summary -> Key findings (by severity, from the code
-review) -> Attack surface / threats (from the threat model) -> Security test
-cases to investigate -> Prioritized remediation roadmap.
-
-If a test_case agent produced a list of test cases, reproduce that full,
-prioritized list in the "Security test cases to investigate" section — keep the
-IDs, steps, and expected results; do NOT collapse it into a sentence.
-
-USER REQUEST: {request}
-
-SPECIALIST OUTPUTS:
-{outputs}
-"""
-
-_DAG_SYNTHESIS_PROMPT = """You are the lead application-security engineer. Merge
+_SYNTHESIS_PROMPT = """You are the lead application-security engineer. Merge
 the specialist agents' outputs below into ONE report. This came from a task graph
 in which some tasks may have failed or been skipped — be honest about coverage.
 
@@ -408,38 +390,48 @@ class Orchestrator:
         on_step=None,
     ) -> dict:
         """Execute the full pipeline. ``on_step(i, step)`` is an optional progress
-        callback. Returns {"plan", "steps": [...], "report", "report_path"}.
+        callback. Returns {"plan", "steps": [...], "dag", "report", "report_path"}.
 
-        Uses DAG execution (bounded parallel fan-out) when
-        ``config.orchestrator.mode == 'dag'`` and no explicit linear ``plan`` was
-        passed; otherwise runs the classic linear pipeline.
+        There is one execution engine — the task DAG (:meth:`_execute`). A DAG
+        plan (``config.orchestrator.mode == 'dag'``, the default) can express real
+        independence and fan out in parallel; a linear plan is just the degenerate
+        case — a strictly-sequential chain where each step depends on every earlier
+        one, so it runs in order and sees all prior outputs as context. An explicit
+        ``plan`` (list of :class:`Step`) is always run as that sequential chain.
         """
-        mode = getattr(getattr(self.config, "orchestrator", None), "mode", "linear")
-        if plan is None and mode == "dag":
-            return self.run_dag(request, on_step=on_step)
-        plan = plan or self.plan(request)
-        outputs: list[dict] = []
-        context_parts: list[str] = []
-
-        for i, step in enumerate(plan, 1):
-            if on_step:
-                on_step(i, step)
-            # the last few agents' findings, budgeted for the reader's model
-            ctx = _merge_outputs(
-                context_parts[-3:], prompt_char_budget(self.config.llm_for(step.agent))
+        if plan is not None:
+            tasks = self._sequential_tasks(plan)
+        else:
+            mode = getattr(
+                getattr(self.config, "orchestrator", None), "mode", "linear"
             )
-            result = self.run_agent(step.agent, step.task, context=ctx)
-            outputs.append({"agent": step.agent, "task": step.task, "output": result})
-            context_parts.append((step.agent, result))
+            tasks = (
+                self.plan_dag(request)
+                if mode == "dag"
+                else self._sequential_tasks(self.plan(request))
+            )
+        return self._execute(request, tasks, on_step=on_step)
 
-        report = self._synthesize(request, outputs)
-        report_path = self._save_report(request, plan, outputs, report)
-        return {
-            "plan": plan,
-            "steps": outputs,
-            "report": report,
-            "report_path": report_path,
-        }
+    @staticmethod
+    def _sequential_tasks(steps: list[Step]) -> list[Task]:
+        """A linear plan as a fully-sequential DAG chain.
+
+        Each task depends on EVERY earlier one, which pins strict ordering (no
+        step is ready until all before it are done) and, through the executor's
+        dependency-scoped context, feeds each step every prior step's output —
+        the "sees all earlier findings" behaviour the linear pipeline relied on.
+        """
+        tasks: list[Task] = []
+        for i, step in enumerate(steps, 1):
+            tasks.append(
+                Task(
+                    id=f"t{i}",
+                    agent=step.agent,
+                    task=step.task,
+                    depends_on=[t.id for t in tasks],
+                )
+            )
+        return tasks
 
     def run_single(self, request: str, on_step=None) -> dict:
         """Fast path: route to one best-fit agent and run only it (no synthesis)."""
@@ -465,13 +457,23 @@ class Orchestrator:
         plan: Optional[list[Task]] = None,
         on_step=None,
     ) -> dict:
-        """Execute a task DAG with bounded parallel fan-out and partial-failure
-        isolation, then synthesize. Returns the same shape as :meth:`run` plus a
-        ``dag`` entry with the executed task nodes."""
+        """Plan (if needed) and execute a task DAG. Thin wrapper over the shared
+        :meth:`_execute` engine, kept as a named entry point for callers that
+        already hold a :class:`Task` plan."""
+        return self._execute(request, plan or self.plan_dag(request), on_step=on_step)
+
+    def _execute(
+        self,
+        request: str,
+        tasks: list[Task],
+        on_step=None,
+    ) -> dict:
+        """The single execution engine: run a task DAG with bounded parallel
+        fan-out and partial-failure isolation, then synthesize. Returns
+        {"plan", "steps", "dag", "report", "report_path"}."""
         import concurrent.futures as cf
         import threading
 
-        tasks = plan or self.plan_dag(request)
         by_id = {t.id: t for t in tasks}
         max_workers = max(
             1, getattr(getattr(self.config, "orchestrator", None), "max_concurrency", 3)
@@ -574,7 +576,7 @@ class Orchestrator:
             }
             for t in tasks
         ]
-        report = self._synthesize_dag(request, tasks)
+        report = self._synthesize(request, tasks)
         report_path = self._save_report(request, tasks, outputs, report)
         return {
             "plan": tasks,
@@ -585,7 +587,7 @@ class Orchestrator:
         }
 
     # ---------------------------------------------------------- synthesize
-    def _synthesize_dag(self, request: str, tasks: list[Task]) -> str:
+    def _synthesize(self, request: str, tasks: list[Task]) -> str:
         done = [t for t in tasks if t.status == "done"]
         if not done:
             # Include each task's error: this is the one branch the user reads
@@ -609,24 +611,9 @@ class Orchestrator:
             [(f"{t.agent} (task {t.id}: {t.task})", t.artifact) for t in done],
             prompt_char_budget(self.config.llm),
         )
-        prompt = _DAG_SYNTHESIS_PROMPT.format(
+        prompt = _SYNTHESIS_PROMPT.format(
             request=request, coverage="\n".join(coverage_lines), outputs=joined
         )
-        try:
-            return message_text(self.llm.invoke(prompt))
-        except Exception as e:
-            return joined + f"\n\n[synthesis failed: {e}]"
-
-    def _synthesize(self, request: str, outputs: list[dict]) -> str:
-        if not outputs:
-            return "No agent produced output."
-        if len(outputs) == 1:
-            return outputs[0]["output"]
-        joined = _merge_outputs(
-            [(f"{o['agent']} (task: {o['task']})", o["output"]) for o in outputs],
-            prompt_char_budget(self.config.llm),
-        )
-        prompt = _SYNTHESIS_PROMPT.format(request=request, outputs=joined)
         try:
             return message_text(self.llm.invoke(prompt))
         except Exception as e:

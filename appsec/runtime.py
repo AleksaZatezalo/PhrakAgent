@@ -7,6 +7,7 @@ Date Created: 07-31-2026
 from __future__ import annotations
 
 import contextvars
+import threading
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:  # avoid import cycles at runtime
@@ -88,6 +89,34 @@ def take_findings() -> list:
     out = _FINDINGS.get() or []
     _FINDINGS.set(None)
     return out
+
+
+# ------------------------------------------------------------- token usage
+# Process-wide (not a context-var) and lock-guarded: the point is the TOTAL
+# across everything a session spends — chat turns, every agent in a DAG's
+# parallel fan-out, and the report generator — because that total is what a
+# paid provider bills for.
+_USAGE_LOCK = threading.Lock()
+_USAGE: dict[str, int] = {"input": 0, "output": 0, "calls": 0}
+
+
+def record_usage(msg) -> None:
+    """Best-effort token accounting from one model reply's provider metadata."""
+    um = getattr(msg, "usage_metadata", None) or {}
+    meta = getattr(msg, "response_metadata", None) or {}
+    inp = um.get("input_tokens") or meta.get("prompt_eval_count") or 0
+    out = um.get("output_tokens") or meta.get("eval_count") or 0
+    if not inp and not out:
+        return
+    with _USAGE_LOCK:
+        _USAGE["input"] += int(inp)
+        _USAGE["output"] += int(out)
+        _USAGE["calls"] += 1
+
+
+def usage_totals() -> dict:
+    with _USAGE_LOCK:
+        return dict(_USAGE)
 
 
 # ------------------------------------------------------------- test cases

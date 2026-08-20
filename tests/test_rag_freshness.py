@@ -199,6 +199,71 @@ def test_sync_reports_progress_for_a_large_index(config, workspace, monkeypatch)
     assert seen[-1][0] == seen[-1][1]  # finishes at done == total
 
 
+# ------------------------------------------------------------ phrak index
+def test_stats_reports_pending_work_without_changing_anything(
+    config, workspace, monkeypatch
+):
+    idx = CodeIndex(config)
+    monkeypatch.setattr(idx, "count", lambda: 0)
+    monkeypatch.setattr(idx, "_indexed_mtimes", lambda: {})
+    s = idx.stats()
+    assert s["workspace_files"] > 0
+    assert s["new"] == s["workspace_files"]
+    assert s["pending"] == s["new"]
+    assert s["changed"] == 0 and s["orphaned"] == 0
+
+
+def test_stats_counts_changed_and_orphaned(config, workspace, monkeypatch):
+    idx = CodeIndex(config)
+    monkeypatch.setattr(idx, "count", lambda: 10)
+    # vuln_app.py indexed at a bogus mtime -> changed; ghost.py gone -> orphaned
+    monkeypatch.setattr(
+        idx,
+        "_indexed_mtimes",
+        lambda: {"vuln_app.py": 1.0, "requirements.txt": 1.0, "ghost.py": 1.0},
+    )
+    s = idx.stats()
+    assert s["changed"] == 2  # both indexed files have a different real mtime
+    assert s["orphaned"] == 1  # ghost.py is no longer on disk
+    assert s["pending"] == s["new"] + s["changed"] + s["orphaned"]
+
+
+def test_stats_is_clean_when_the_index_matches_disk(config, workspace, monkeypatch):
+    idx = CodeIndex(config)
+    monkeypatch.setattr(idx, "count", lambda: 4)
+    real = {idx._rel(p): p.stat().st_mtime for p in idx._iter_files()}
+    monkeypatch.setattr(idx, "_indexed_mtimes", lambda: real)
+    s = idx.stats()
+    assert s["pending"] == 0
+    assert s["new"] == 0 and s["changed"] == 0 and s["orphaned"] == 0
+
+
+def test_index_subcommand_parses():
+    from appsec.cli import build_parser
+
+    args = build_parser().parse_args(["index"])
+    assert args.cmd == "index"
+    assert args.rebuild is False and args.stats is False
+    assert build_parser().parse_args(["index", "--rebuild"]).rebuild is True
+    assert build_parser().parse_args(["index", "--stats"]).stats is True
+
+
+def test_reindex_passes_progress_through(config, workspace, monkeypatch):
+    idx = CodeIndex(config)
+    seen = []
+    monkeypatch.setattr(idx, "_indexed_mtimes", lambda: {})
+    monkeypatch.setattr(idx, "_add_file", lambda fp, rel, mtime: 1)
+    monkeypatch.setattr(idx, "_delete_path", lambda rel: None)
+
+    class _Coll:
+        def get(self, *a, **k):
+            return {"ids": []}
+
+    monkeypatch.setattr(type(idx), "store", property(lambda self: _Coll()))
+    idx.reindex(on_progress=lambda d, t, r: seen.append(d))
+    assert seen == list(range(1, len(seen) + 1))
+
+
 def test_rag_search_flags_a_failed_sync(config, runtime, monkeypatch):
     from appsec.tools import rag_tool
 
