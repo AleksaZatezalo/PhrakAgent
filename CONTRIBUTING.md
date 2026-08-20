@@ -29,7 +29,7 @@ pip install pytest black ruff         # dev tooling (not in the install deps)
 Requires Python **3.10+**. To exercise anything model-facing you also need
 [Ollama](https://ollama.com) with a tool-capable model (`ollama pull
 qwen2.5-coder:7b`), or an Anthropic API key via `phrak config`. Optionally
-install [Opengrep](https://opengrep.dev) for static-analysis leads — PHRAK
+install [OpenGrep](https://opengrep.dev) for static-analysis leads — PHRAK
 degrades gracefully without it, and the test suite mocks it.
 
 ## Tests
@@ -107,7 +107,7 @@ breaks one won't be merged, however useful it is otherwise:
    `phrak clone`: HTTPS/SSH only, shallow, hooks disabled, size-capped, confined
    to `<workspace>/clones`.
 3. **PHRAK never scans or attacks remote hosts, and does not use Nuclei.**
-4. **Opengrep is the sole static analyzer.** No Semgrep, CodeQL, or Joern
+4. **OpenGrep is the sole static analyzer.** No CodeQL or Joern
    integrations — those PRs get closed. New *analyzers* are welcome as
    `AnalyzerAdapter` implementations (see
    [`appsec/analyzers/base.py`](appsec/analyzers/base.py)) as long as they're

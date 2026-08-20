@@ -39,6 +39,15 @@ _ATTR = re.compile(r"^([A-Za-z][A-Za-z /_]{1,38}?)\s*[:=]\s*(.*)$")
 # A leading list marker: "1 ", "1. ", "2) ", "- ", "* ", "• ".
 _MARKER = re.compile(r"^(?:(\d+)[.)]?|[-*•])\s+(.*)$")
 
+
+def _deemph(s: str) -> str:
+    """Strip markdown emphasis so `**Key:**`, `__Key__`, and `` `Key` `` are seen
+    as plain ``Key``. Models routinely bold attribute labels
+    (``- **Severity:** High``); without this, every such line fails key matching
+    and the whole finding/test-case block is silently dropped."""
+    s = s.replace("**", "").replace("__", "").replace("`", "")
+    return s
+
 # Severity words we accept, mapped onto the finding vocabulary.
 _SEV = {
     "critical": "critical",
@@ -117,6 +126,7 @@ def _clean_title(text: str) -> str:
     t = text.strip()
     t = re.sub(r"`[^`]*`", "", t)  # drop inline-code ids like `FND-ab12cd34ef`
     t = t.strip(" *#_").strip()
+    t = re.sub(r"^\d+[.)]\s+", "", t)  # a leading list number that rode along
     t = re.sub(r"\s*\((?:critical|high|medium|low|info)\)\s*$", "", t, flags=re.I)
     return t.strip()
 
@@ -251,7 +261,7 @@ def _records(text: str) -> list[_Record]:
         if not raw.strip():
             collecting_steps = False
             continue
-        stripped = raw.strip()
+        stripped = _deemph(raw.strip())
 
         # A markdown / "Finding N" / **bold** header always starts a record.
         header = _header_title(stripped)

@@ -32,7 +32,7 @@ from ..tools.opengrep_tools import (
 )
 from .base import ANALYZER_LEAD_MAX_CONFIDENCE, AnalyzerResult, clamp, extract_cwe
 
-# Opengrep/Semgrep severities → PHRAK severities.
+# OpenGrep severities → PHRAK severities.
 _SEVERITY = {"ERROR": "high", "WARNING": "medium", "INFO": "low"}
 # Opengrep metadata confidence → a numeric lead confidence (always a lead, so low).
 _CONFIDENCE = {"HIGH": 0.6, "MEDIUM": 0.5, "LOW": 0.4}

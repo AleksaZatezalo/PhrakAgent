@@ -645,13 +645,22 @@ returns an install hint instead of falling back to the host.
 **What it does.** It runs after `code_review`/`threat_model` and takes their
 **confirmed data-flow findings** — SQLi, command injection, path traversal,
 unsafe deserialization, SSRF against a controlled target — writes a short PoC
-for each, and runs it in a container. It may only confirm findings already in
-the run's ledger; discovery is not its job. A PoC that lands is recorded as
-`evidence_type=runtime_observation`, promoting the finding on the **runtime**
-status track; one that doesn't land after a retry is recorded
-`runtime_status: false_positive` with a note on what was tried — it is never
-re-marked confirmed. Bugs needing a full app stack are reported as
-*out of scope* rather than guessed at.
+for each, and runs it in a container with `run_poc`. It may only confirm findings
+already in the run's ledger; discovery is not its job. It then records the
+verdict on the finding with **`record_poc_result(finding_id, outcome, …)`**,
+which writes to the finding's **runtime** status track in the durable store:
+
+| `outcome` | Effect on the finding |
+|-----------|-----------------------|
+| `confirmed` | Runtime track → `confirmed` (and confidence raised) — a landed PoC is the strongest evidence there is |
+| `false_positive` | Runtime track → `false_positive`; never re-marked confirmed |
+| `inconclusive` | Status unchanged, a note is attached (needs a full app stack / out of scope) |
+
+The runtime track folds into the finding's `effective_status` **above** the
+reporting agent's status but **below** a human triage decision (human > runtime >
+agent), so a landed PoC promotes a finding to runtime-confirmed while your own
+verdict still wins. Bugs needing a full app stack are reported as *out of scope*
+rather than guessed at.
 
 **The sandbox.** Every PoC runs via `docker run --rm` (or podman) with:
 
@@ -884,6 +893,10 @@ happens. Between tool calls it also streams progress notes on the same channel:
 it writes, `… completion round N/M` while it fills in missing report sections,
 `… recorded N structured finding(s)`, and `… compiling the final report` — so a
 long run (e.g. `threat_model`) visibly shows activity instead of looking stuck.
+When a weak model writes a report but never calls the capture tools, you'll also
+see the reliability layers kick in — `… transcribing the report into trackable
+items`, `… recovered N finding(s) from the report text`, or `salvaged N
+finding(s) from the consolidated report`.
 Output stays clean when piped (no ANSI, no spinner artifacts).
 
 ## Safety posture
@@ -993,9 +1006,13 @@ PHRAK was built incrementally on one architecture. All landed work:
   plus semantic `rag_search` for finding sibling instances of a bug pattern.
 - **Runtime verification** — the opt-in `verify` agent, proving exploitability
   with a minimal PoC inside a locked-down container and promoting the finding's
-  runtime status only when it lands.
+  runtime status via `record_poc_result` only when it lands.
 - **Injection-hardened tool rescue** — verbalized-call extraction narrowed to
   fenced blocks, with example-framing, inline code, and blockquotes excluded.
+- **Capture reliability** — findings and test cases land in the backlog even when
+  a weak local model writes a report but never calls the capture tools: a
+  guaranteed recording pass, then deterministic extraction of the report text
+  (`appsec/extract.py`), applied per-agent and again on the consolidated report.
 - **Operator workflow** — a non-agentic layer over the agents' output: hand-
   entered verified findings, a trackable test-case backlog (status, result,
   notes, finding links), and `generate_report` to assemble the engagement into
@@ -1011,7 +1028,10 @@ appsec/
   cli.py            argparse entry point (`phrak`) + the chat REPL loop
   app.py            bootstrap: config -> llm, skills, rag, orchestrator, registry
   base_agent.py     agent loop + registry + run-to-completion + finding persistence
+                    (incl. deterministic capture fallback when the model won't record)
   orchestrator.py   planner/router + DAG execution (parallel fan-out) + synthesis
+                    + salvage of findings/test cases from the consolidated report
+  extract.py        deterministic findings/test-case extraction from a prose report
   chat.py           conversational session (multi-turn, tool use, thread memory)
   repl.py           chat REPL helpers (readline autocomplete/history, grouped /help)
   llm.py            chat-model factory (ollama | anthropic) + model registry
@@ -1041,7 +1061,8 @@ appsec/
   tools/            common (sandbox/subprocess/loopback+SSRF guard), filesystem,
                     analysis, opengrep_tools, analyzer_tools, findings_tool,
                     rag_tool (semantic search), testcase_tool, clone_tool,
-                    verify_tool (sandboxed PoC runner), interaction, skills_tool
+                    verify_tool (sandboxed PoC runner + record_poc_result runtime
+                    verdict), interaction, skills_tool
   skills/           curated skills: threat_model/*.md, code_review/*.md,
                     test_case/*.md
 cli.py              thin shim so `python cli.py …` still works

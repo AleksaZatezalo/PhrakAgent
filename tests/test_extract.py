@@ -134,6 +134,44 @@ def test_empty_and_junk_text_yield_nothing():
         assert _test_cases_from_report(txt) == []
 
 
+# The shape a real synthesized report uses: markdown-bold attribute labels under
+# numbered items. Regression: `- **Severity:** High` failed key matching (leading
+# `**`), so the whole block was dropped and /findings stayed empty on a real run.
+BOLD_REPORT = """
+## Confirmed Findings (by severity)
+
+### High Severity
+
+1. **SQL Injection via User Input**
+    - **Description:** Unvalidated input reaches the query in views.py.
+    - **Severity:** High
+    - **Mitigation:** Use parameterized queries.
+
+## Security Test Cases to Investigate
+
+1. **Title:** Verify Input Validation for User Inputs
+    - **Target:** vulnbank/views.py:100
+    - **Steps:**
+        1. Log in as a test user.
+        2. Submit a SQL payload.
+    - **Expected Result:** The request is rejected.
+    - **Severity:** High
+"""
+
+
+def test_bold_markdown_labels_are_parsed():
+    findings = findings_from_report(BOLD_REPORT)
+    assert [f.title for f in findings] == ["SQL Injection via User Input"]
+    assert findings[0].severity == "high"
+
+    cases = _test_cases_from_report(BOLD_REPORT)
+    assert len(cases) == 1
+    assert cases[0].title == "Verify Input Validation for User Inputs"
+    assert cases[0].target == "vulnbank/views.py:100"
+    assert len(cases[0].steps) == 2
+    assert cases[0].severity == "high"
+
+
 def test_finding_without_locatable_file_is_unconfirmed(tmp_path):
     report = """
 Finding 1: Something vague

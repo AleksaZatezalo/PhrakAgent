@@ -13,7 +13,7 @@ things are settled rather than undecided:
   * agents are read-only, no target traffic, no HTTP tool
   * no network access without explicit opt-in
   * PHRAK never scans or attacks remote hosts, and does not use Nuclei
-  * Opengrep is the sole static analyzer — no Semgrep / CodeQL / Joern
+  * OpenGrep is the sole static analyzer — no CodeQL / Joern
   * the agent set is code_review / threat_model / test_case; an exploit-development
     agent was deliberately removed and isn't coming back
 
