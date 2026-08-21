@@ -18,6 +18,8 @@ def command_names(app) -> list[str]:
         "index",
         "run",
         "route",
+        "see_threatmodel",
+        "see_codereview",
         "findings",
         "finding",
         "finding-add",
@@ -122,6 +124,8 @@ def chat_help(app) -> None:
                 ("/index [--rebuild|--stats]", "refresh the code index (no AI)"),
                 ("/run <text>", "full multi-agent assessment + saved report"),
                 ("/route <text>", "auto-route to the single best-fit agent"),
+                ("/see_threatmodel", "replay the latest threat_model report"),
+                ("/see_codereview", "replay the latest code_review report"),
             ],
         ),
         (

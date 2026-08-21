@@ -373,6 +373,18 @@ def cmd_chat(args) -> int:
                 print()
                 render_markdown(finding_detail(app, rest))
                 print()
+            elif cmd in ("see_threatmodel", "see-threatmodel"):
+                from .session_cmds import show_agent_report
+
+                print()
+                render_markdown(show_agent_report(app, "threat_model"))
+                print()
+            elif cmd in ("see_codereview", "see-codereview"):
+                from .session_cmds import show_agent_report
+
+                print()
+                render_markdown(show_agent_report(app, "code_review"))
+                print()
             elif cmd == "triage":
                 from .session_cmds import triage_finding
 

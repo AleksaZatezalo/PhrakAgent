@@ -92,6 +92,33 @@ def describe_at_refs(text: str, workspace: Path) -> list[str]:
     return out
 
 
+def show_agent_report(app, agent: str) -> str:
+    """The latest saved report for ``agent``, rendered for the pager.
+
+    Single-agent runs (``/threat_model``, ``/code_review``, ``phrak agent …``)
+    save their output as ``report-<ts>-<agent>.md``. This surfaces the newest one
+    verbatim so ``/see_threatmodel`` and ``/see_codereview`` can replay a run's
+    output after the terminal has scrolled, without re-spending tokens on a fresh
+    run. Returns a friendly note (not an error) when nothing has been saved yet.
+    """
+    from .report import _latest_report, _section_body
+
+    label = agent.replace("_", " ")
+    path = _latest_report(app.config, agent)
+    if path is None:
+        return (
+            f"_No `{agent}` report found in `{app.config.reports_dir()}`._\n\n"
+            f"Run `/{agent} <target>` first, then `/see_{agent.replace('_', '')}` "
+            "to replay its output."
+        )
+    body = _section_body(path)
+    header = (
+        f"# Latest {label} report\n\n"
+        f"_Source: `{path.name}`_\n\n---\n"
+    )
+    return header + body
+
+
 def list_tools_grouped(app) -> str:
     """A grouped catalog of every tool each agent exposes (for ``/tools``)."""
     lines = ["Tools by agent:"]
