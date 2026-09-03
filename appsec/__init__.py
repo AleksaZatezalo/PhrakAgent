@@ -4,4 +4,4 @@ Author: Aleksa Zatezalo
 Date Created: 07-31-2026
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

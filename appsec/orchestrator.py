@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -217,6 +216,11 @@ class Orchestrator:
         self.config = config
         self.registry = registry
         self.models = models
+        from .report_writer import ReportWriter
+
+        # Report persistence (per-agent, section, consolidated + pruning) lives in
+        # ReportWriter; the orchestrator plans and executes.
+        self.reports = ReportWriter(config)
 
     def _model_for(self, agent_name: str) -> BaseChatModel:
         """The (possibly per-agent overridden) model for an agent."""
@@ -299,31 +303,12 @@ class Orchestrator:
         return agent.run(task, extra_context=context)
 
     def save_agent_report(self, name: str, task: str, output: str) -> str:
-        """Persist ONE agent's final output under ``reports_dir``; returns the path.
+        """Persist ONE agent's final output; returns the path. See ReportWriter.
 
-        A direct single-agent run (``phrak agent <name> ...``, ``/<name>`` in
-        chat) skips the pipeline's consolidated report, so its output — including
-        the structured findings the agent appends — would otherwise be lost once
-        the terminal scrolls. The timestamp leads the filename so the shared
-        ``report-*.md`` glob still sorts and prunes chronologically.
+        Kept as a method because a direct single-agent run (``phrak agent`` /
+        ``/<name>`` in chat) calls it through the orchestrator.
         """
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        path = self.config.reports_dir() / f"report-{ts}-{name}.md"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            "\n".join(
-                [
-                    f"# {name} Report — {ts}",
-                    f"\n**Agent:** {name}",
-                    f"\n**Task:** {task}\n",
-                    "## Output\n",
-                    output,
-                    "",
-                ]
-            )
-        )
-        self._prune_reports()
-        return str(path)
+        return self.reports.save_agent_report(name, task, output)
 
     # --------------------------------------------------------- DAG planning
     def plan_dag(self, request: str) -> list[Task]:
@@ -402,9 +387,7 @@ class Orchestrator:
         if plan is not None:
             tasks = self._sequential_tasks(plan)
         else:
-            mode = getattr(
-                getattr(self.config, "orchestrator", None), "mode", "linear"
-            )
+            mode = self.config.orchestrator.mode
             tasks = (
                 self.plan_dag(request)
                 if mode == "dag"
@@ -441,7 +424,7 @@ class Orchestrator:
             on_step(1, step)
         output = self.run_agent(name, request)
         outputs = [{"agent": name, "task": request, "output": output}]
-        report_path = self._save_report(request, [step], outputs, output)
+        report_path = self.reports.save_consolidated(request, [step], outputs, output)
         return {
             "plan": [step],
             "steps": outputs,
@@ -484,12 +467,9 @@ class Orchestrator:
         n_tc_before = len(TestCaseStore(self.config).list())
 
         by_id = {t.id: t for t in tasks}
-        max_workers = max(
-            1, getattr(getattr(self.config, "orchestrator", None), "max_concurrency", 3)
-        )
-        continue_on_failure = getattr(
-            getattr(self.config, "orchestrator", None), "continue_on_failure", True
-        )
+        orch = self.config.orchestrator
+        max_workers = max(1, orch.max_concurrency)
+        continue_on_failure = orch.continue_on_failure
 
         lock = threading.Lock()
         step_counter = {"n": 0}
@@ -588,7 +568,7 @@ class Orchestrator:
         # Persist each specialist's own report so generate_report can quote it.
         # A pipeline run otherwise only saves the consolidated report, leaving
         # generate_report with no threat_model / code_review section to include.
-        self._save_section_reports(tasks)
+        self.reports.save_section_reports(tasks)
 
         report = self._synthesize(request, tasks)
         self._salvage_from_report(
@@ -599,7 +579,7 @@ class Orchestrator:
         # Now that findings exist (recorded by the agents or salvaged above), make
         # sure every one — including unconfirmed findings — has a test case.
         self._ensure_coverage()
-        report_path = self._save_report(request, tasks, outputs, report)
+        report_path = self.reports.save_consolidated(request, tasks, outputs, report)
         return {
             "plan": tasks,
             "steps": outputs,
@@ -658,70 +638,27 @@ class Orchestrator:
         """
         if not report or not (recover_findings or recover_test_cases):
             return
-        from . import extract
+        from . import salvage
         from .banner import GREY, RESET
-        from .store import FindingStore, TaintStore, TestCaseStore
-        from .tools.common import workspace
 
         try:
-            ws = workspace()
-        except Exception:
-            ws = None
-        n_f = n_t = 0
-        try:
-            if recover_findings:
-                findings = extract.findings_from_report(
-                    report, source_agent="synthesis", workspace=ws
-                )
-                if findings:
-                    FindingStore(self.config).upsert(findings, run_id="synthesis")
-                    TaintStore(self.config).upsert(findings, run_id="synthesis")
-                    n_f = len(findings)
-            if recover_test_cases:
-                cases = extract.test_cases_from_report(report, source_agent="synthesis")
-                if cases:
-                    TestCaseStore(self.config).upsert(cases)
-                    n_t = len(cases)
+            res = salvage.into_stores(
+                self.config,
+                report,
+                source_agent="synthesis",
+                run_id="synthesis",
+                findings=recover_findings,
+                test_cases=recover_test_cases,
+            )
         except Exception as e:  # salvage is best-effort, never fails the run
             print(f"  {GREY}(could not salvage items from report: {e}){RESET}")
             return
-        if n_f or n_t:
-            got = ", ".join(
-                p
-                for p in (
-                    f"{n_f} finding(s)" if n_f else "",
-                    f"{n_t} test case(s)" if n_t else "",
-                )
-                if p
-            )
+        got = salvage.summary(len(res.findings), len(res.test_cases))
+        if got:
             print(
                 f"  {GREY}salvaged {got} from the consolidated report "
                 f"(agents recorded none){RESET}"
             )
-
-    def _save_section_reports(self, tasks: list[Task]) -> None:
-        """Save each completed threat_model / code_review task as its own report.
-
-        generate_report quotes the latest ``report-<ts>-<agent>.md`` for those
-        agents; a pipeline run only writes the consolidated report, so without
-        this those sections show as 'no report found' placeholders even though
-        the agents ran. Best-effort — a save failure never fails the run.
-        """
-        from .report import SECTION_AGENTS
-
-        wanted = {a for a, _ in SECTION_AGENTS}
-        for t in tasks:
-            if t.agent not in wanted or t.status != "done":
-                continue
-            body = (t.artifact or "").strip()
-            if not body or body.startswith("[task "):
-                continue  # nothing usable (failed/skipped placeholder)
-            try:
-                self.save_agent_report(t.agent, t.task, t.artifact)
-            except Exception as e:  # pragma: no cover - defensive
-                from .banner import GREY, RESET
-
-                print(f"  {GREY}(could not save {t.agent} report: {e}){RESET}")
 
     def _ensure_coverage(self) -> None:
         """Link/backfill test cases so every finding has one. Best-effort."""
@@ -741,35 +678,3 @@ class Orchestrator:
         if bits:
             print(f"  {GREY}coverage: {', '.join(bits)}{RESET}")
 
-    def _save_report(
-        self, request: str, plan: list[Step], outputs: list[dict], report: str
-    ) -> str:
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        path = self.config.reports_dir() / f"report-{ts}.md"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        body = [
-            f"# AppSec Report — {ts}",
-            f"\n**Request:** {request}\n",
-            "## Plan",
-            "\n".join(f"{i}. **{s.agent}** — {s.task}" for i, s in enumerate(plan, 1)),
-            "\n## Consolidated Report\n",
-            report,
-            "\n---\n## Raw agent outputs\n",
-        ]
-        for o in outputs:
-            body.append(f"### {o['agent']}\n\n{o['output']}\n")
-        path.write_text("\n".join(body))
-        self._prune_reports()
-        return str(path)
-
-    def _prune_reports(self) -> None:
-        keep = self.config.keep_reports
-        if not keep or keep <= 0:
-            return
-        d = self.config.reports_dir()
-        files = sorted(d.glob("report-*.md"))
-        for f in files[:-keep]:
-            try:
-                f.unlink()
-            except OSError:
-                pass

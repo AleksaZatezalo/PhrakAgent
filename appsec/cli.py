@@ -249,6 +249,8 @@ def cmd_chat(args) -> int:
     from . import repl
     from .chat import ChatSession
 
+    from .chat_commands import ChatContext, dispatch
+
     session = ChatSession(app)
     commands = repl.setup_readline(app)
     from . import banner
@@ -277,252 +279,11 @@ def cmd_chat(args) -> int:
 
         if line.startswith("/"):
             cmd, _, rest = line[1:].partition(" ")
-            cmd = cmd.lower()
-            rest = rest.strip()
-
-            if cmd in ("help", "?", "h", ""):
-                repl.chat_help(app)
-            elif cmd in ("quit", "exit", "q"):
-                phrak_print("disconnecting...")
+            ctx = ChatContext(
+                app=app, session=session, args=args, rest=rest.strip()
+            )
+            if dispatch(ctx, cmd.lower(), commands):
                 break
-            elif cmd == "agents":
-                if "--verbose" in rest.split() or "-v" in rest.split():
-                    from .session_cmds import list_tools_grouped
-
-                    print(app.registry.catalog())
-                    print("\n" + list_tools_grouped(app))
-                else:
-                    print(app.registry.catalog())
-            elif cmd == "config":
-                if rest.strip() == "--show":
-                    print(app.config.show())
-                else:
-                    run_setup(_config_path(args))
-                    phrak_print(
-                        "config saved — restart PHRAK to apply the new " "settings."
-                    )
-            elif cmd == "clone":
-                from .clone import clone_repo
-
-                toks = rest.split()
-                if not toks:
-                    print("usage: /clone <git-url> [dest] [--index]")
-                else:
-                    do_index = "--index" in toks
-                    toks = [t for t in toks if t != "--index"]
-                    res = clone_repo(
-                        app.config, toks[0], toks[1] if len(toks) > 1 else ""
-                    )
-                    phrak_print(res.message)
-                    if res.ok and do_index:
-                        app.config.paths.workspace = res.dest
-                        stats = app.rag.reindex()
-                        phrak_print(
-                            f"workspace -> {res.dest}; indexed "
-                            f"{stats['chunks']} chunks"
-                        )
-            elif cmd == "ask":
-                if not rest:
-                    print(
-                        "usage: /ask <question>   (add --reindex to refresh "
-                        "the index first)"
-                    )
-                    continue
-                tokens = rest.split()
-                reindex = "--reindex" in tokens
-                question = " ".join(t for t in tokens if t != "--reindex")
-                print()
-                _do_ask(app, question, reindex=reindex)
-                print()
-            elif cmd == "run":
-                if not rest:
-                    print("usage: /run <request>")
-                    continue
-                result = app.orchestrator.run(
-                    rest,
-                    on_step=lambda i, s: phrak_print(
-                        f"{BGREEN}{s.agent}{RESET} → {s.task}"
-                    ),
-                )
-                print()
-                render_markdown(result["report"])
-                _land_report(app, result["report_path"])
-                print()
-            elif cmd == "route":
-                if not rest:
-                    print("usage: /route <request>")
-                    continue
-                result = app.orchestrator.run_single(
-                    rest,
-                    on_step=lambda i, s: phrak_print(
-                        f"routed → {BGREEN}{s.agent}{RESET}"
-                    ),
-                )
-                print()
-                render_markdown(result["report"])
-                _land_report(app, result["report_path"])
-                print()
-            elif cmd == "findings":
-                from .session_cmds import findings_list, parse_findings_flags
-
-                kwargs, err = parse_findings_flags(rest)
-                print(err or findings_list(app, **kwargs))
-            elif cmd == "finding":
-                from .session_cmds import finding_detail
-
-                print()
-                render_markdown(finding_detail(app, rest))
-                print()
-            elif cmd in ("see_threatmodel", "see-threatmodel"):
-                from .session_cmds import show_agent_report
-
-                print()
-                render_markdown(show_agent_report(app, "threat_model"))
-                print()
-            elif cmd in ("see_codereview", "see-codereview"):
-                from .session_cmds import show_agent_report
-
-                print()
-                render_markdown(show_agent_report(app, "code_review"))
-                print()
-            elif cmd == "triage":
-                from .session_cmds import triage_finding
-
-                phrak_print(triage_finding(app, rest))
-            elif cmd == "note":
-                from .session_cmds import note_finding
-
-                phrak_print(note_finding(app, rest))
-            elif cmd == "finding-add":
-                from .session_cmds import add_manual_finding, prompt_for_finding
-
-                print(
-                    f"\n  {GREEN}new verified finding{RESET} "
-                    f"{GREY}(Ctrl-C to cancel; the id is generated){RESET}"
-                )
-                fields = prompt_for_finding()
-                print()
-                if fields is None:
-                    phrak_print("cancelled — nothing recorded.")
-                else:
-                    phrak_print(add_manual_finding(app, **fields))
-            elif cmd == "index":
-                toks = rest.split()
-                if "--stats" in toks:
-                    s = app.rag.stats()
-                    phrak_print(
-                        f"index :: {WHITE}{s['chunks']}{RESET} chunk(s) from "
-                        f"{WHITE}{s['indexed_files']}{RESET} file(s); "
-                        f"{WHITE}{s['pending']}{RESET} pending"
-                    )
-                    continue
-                rebuild = "--rebuild" in toks
-                spinner = Spinner("rebuilding index" if rebuild else "indexing")
-                label = "rebuilding index" if rebuild else "indexing workspace"
-                spinner.start()
-                try:
-                    stats = (
-                        app.rag.reindex(
-                            on_progress=lambda d, t, r: spinner.set_label(
-                                f"{label} {d}/{t}"
-                            )
-                        )
-                        if rebuild
-                        else app.rag.sync(
-                            on_progress=lambda d, t, r: spinner.set_label(
-                                f"{label} {d}/{t}"
-                            )
-                        )
-                    )
-                except Exception as e:
-                    spinner.stop()
-                    phrak_print(f"index failed :: {e}")
-                    continue
-                finally:
-                    spinner.stop()
-                touched = stats["added"] + stats["updated"] + stats["removed"]
-                if touched:
-                    phrak_print(
-                        f"indexed {WHITE}{stats['chunks']}{RESET} chunk(s) :: "
-                        f"+{stats['added']} ~{stats['updated']} -{stats['removed']}"
-                    )
-                else:
-                    phrak_print(f"{GREEN}already up to date{RESET}")
-            elif cmd == "testcases":
-                from .testcase_cmds import parse_testcase_flags, test_cases_list
-
-                kwargs, err = parse_testcase_flags(rest)
-                print(err or test_cases_list(app, **kwargs))
-            elif cmd == "testcase":
-                from .testcase_cmds import test_case_detail
-
-                print()
-                render_markdown(test_case_detail(app, rest))
-                print()
-            elif cmd == "testcase-status":
-                from .testcase_cmds import set_test_case_status
-
-                phrak_print(set_test_case_status(app, rest))
-            elif cmd == "testcase-link":
-                from .testcase_cmds import link_test_case
-
-                phrak_print(link_test_case(app, rest))
-            elif cmd == "testcase-note":
-                from .testcase_cmds import note_test_case
-
-                phrak_print(note_test_case(app, rest))
-            elif cmd == "testcase-add":
-                from .testcase_cmds import add_manual_test_case, prompt_for_test_case
-
-                print(
-                    f"\n  {GREEN}new test case{RESET} "
-                    f"{GREY}(Ctrl-C to cancel; the id is generated){RESET}"
-                )
-                fields = prompt_for_test_case()
-                print()
-                if fields is None:
-                    phrak_print("cancelled — nothing added.")
-                else:
-                    phrak_print(add_manual_test_case(app, **fields))
-            elif cmd == "clear":
-                session.clear()
-                phrak_print("context cleared — starting a fresh thread.")
-            elif cmd == "model":
-                if not rest:
-                    phrak_print(
-                        f"model :: {BGREEN}{session.model_desc}{RESET} "
-                        f"{GREY}(/model <name> to switch, "
-                        f"/model default to reset){RESET}"
-                    )
-                else:
-                    name = "" if rest in ("default", "reset") else rest
-                    phrak_print(f"model :: {BGREEN}{session.switch_model(name)}{RESET}")
-            elif cmd == "cost":
-                print(session.cost_summary())
-            elif cmd == "verbose":
-                session.verbose = not session.verbose
-                state = "on (full tool output)" if session.verbose else "off (summary)"
-                phrak_print(f"verbose :: {state}")
-            elif cmd in app.registry.names():
-                # An assembly agent works from what's already stored, so it
-                # takes no task; the rest need one.
-                if not rest and app.registry.get(cmd).runner is None:
-                    print(f"usage: /{cmd} <task>")
-                    continue
-                print()
-                out = app.orchestrator.run_agent(cmd, rest)
-                render_markdown(out)
-                _land_report(app, app.orchestrator.save_agent_report(cmd, rest, out))
-                print()
-            else:
-                import difflib
-
-                near = difflib.get_close_matches(cmd, commands, n=1, cutoff=0.5)
-                hint = f" did you mean {CYAN}/{near[0]}{RESET}?" if near else ""
-                print(
-                    f"unknown command '/{cmd}'.{hint} "
-                    f"type {CYAN}/help{RESET} for the list."
-                )
             continue
 
         # default: conversational turn with tool use + thread memory. Any
@@ -960,6 +721,30 @@ def main(argv=None) -> int:
         return 2
     except KeyboardInterrupt:
         return 130
+
+
+def phrak_agent_main(argv=None) -> int:
+    """Entry point for the ``phrakagent`` command.
+
+    ``phrakagent [DIR] [phrak args...]`` launches PHRAK with DIR as the
+    workspace — the root the file tools operate under and where ``.phrack``
+    (config, code index, findings, reports) is anchored. DIR defaults to the
+    current directory. With no trailing arguments it drops straight into chat
+    mode, so ``phrakagent /path/to/project`` opens a session scoped to that
+    project. Any further arguments pass through to the normal CLI, so
+    ``phrakagent /proj run "review this"`` works too.
+    """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    directory, rest = ".", argv
+    # A leading non-flag token is the target directory; everything else is
+    # handed to the standard parser unchanged.
+    if argv and not argv[0].startswith("-"):
+        directory, rest = argv[0], argv[1:]
+    target = os.path.abspath(os.path.expanduser(directory))
+    if not os.path.isdir(target):
+        print(f"error: not a directory: {directory}", file=sys.stderr)
+        return 2
+    return main(["-w", target, *rest])
 
 
 if __name__ == "__main__":

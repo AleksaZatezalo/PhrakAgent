@@ -125,6 +125,31 @@ class Agent:
             list(spec.tool_factory()) + interaction_tools() + skill_tools()
         )
 
+    @property
+    def recorder(self):
+        """The run's :class:`RunRecorder`, built on first use.
+
+        Lazy (rather than set in ``__init__``) so it also serves agents built via
+        ``Agent.__new__`` in tests, which set ``tools`` by hand and never run
+        ``__init__``. The note callback forwards to the *current* ``self._note``
+        so a test that reassigns it is still heard.
+        """
+        rec = self.__dict__.get("_recorder")
+        if rec is None:
+            from .run_recorder import RunRecorder
+
+            # getattr defaults so a hand-built ``Agent.__new__`` double that only
+            # set ``spec`` still gets a recorder; a missing config just makes its
+            # best-effort persistence a no-op, exactly as before this extraction.
+            rec = RunRecorder(
+                self.spec.name,
+                getattr(self, "config", None),
+                getattr(self, "tools", []),
+                lambda m: self._note(m),
+            )
+            self._recorder = rec
+        return rec
+
     def _note(self, msg: str) -> None:
         """Emit a grey progress line on the same stdout channel as the tool-call
         lines, so a long run visibly shows activity between tool calls. In quiet
@@ -177,6 +202,7 @@ class Agent:
         )
 
         self._run_id = uuid.uuid4().hex[:12]
+        self.recorder.run_id = self._run_id
         self._error = ""
         set_active_agent(self.spec.name)
         begin_findings()  # capture structured findings emitted via report_finding
@@ -279,163 +305,45 @@ class Agent:
         "leaving it out."
     )
 
-    # Structured-capture tools. Unlike every other tool these write nothing to
-    # the model's context and read nothing from disk — they only persist what the
-    # model has already established — so they stay allowed after the exploration
-    # budget is gone.
-    _RECORDING_TOOLS = ("report_finding", "report_test_case")
-
     # One step per recorded item, so this has to fit a real backlog rather than
     # the odd stray call the write-up round allows for.
     _RECORD_STEPS = 24
 
+    # The recording of confirmed findings / test cases — capture, persistence,
+    # rendering, the nudge prompts and the deterministic prose fallback — all
+    # lives in RunRecorder (``self.recorder``). These stay as thin delegators
+    # because the run loop and a few unit tests call them by name.
     def _recording_tools(self) -> list[str]:
-        return [t.name for t in self.tools if t.name in self._RECORDING_TOOLS]
+        return self.recorder.tool_names()
 
     def _record_reminder(self) -> str:
-        """A nudge to record anything confirmed since the last capture call.
-
-        Appended to mid-run continuation prompts. By this point the model is
-        several rounds deep and drifting toward prose; without it, items it
-        confirmed after its last capture call tend to reach only the report.
-        """
-        names = self._recording_tools()
-        if not names:
-            return ""
-        listed = " / ".join(names)
-        return (
-            f" Before continuing, call {listed} for anything you have confirmed "
-            "since your last one — items only described in prose are not "
-            "recorded."
-        )
-
-    def _record_before_writeup(self, graph, cfg: dict) -> None:
-        """Persist confirmed items before the tool-free write-up round.
-
-        On a large workspace an agent routinely spends its whole step budget
-        exploring, and the write-up prompt then tells it to stop calling tools —
-        which silently includes ``report_finding`` / ``report_test_case``. The
-        prose report would describe a dozen vulnerabilities while the stores
-        behind ``/findings``, ``/testcases`` and ``generate_report`` stayed
-        empty. This round is the one chance to close that gap.
-        """
-        names = self._recording_tools()
-        if not names:
-            return  # e.g. threat_model, which records nothing structured
-        listed = " and ".join(f"`{n}`" for n in names)
-        self._note(f"{self.spec.name}: recording confirmed items before write-up")
-        prompt = (
-            "Your exploration budget is spent. Do NOT read, search, or scan "
-            "anything further — those tools will not run.\n\n"
-            f"Before writing the report, RECORD your results: call {listed} "
-            "once for each distinct item you have ALREADY confirmed by reading "
-            "the code. These are the only tool calls you may make now.\n\n"
-            "Anything you do not record here is absent from the operator's "
-            "backlog even if you describe it in the prose report, so record "
-            "every confirmed item, strongest first. Do not invent items you did "
-            "not verify. When you are done, reply with the single word DONE."
-        )
-        self._drive(graph, prompt, {**cfg, "recursion_limit": self._RECORD_STEPS})
-        # This turn's text is a bookkeeping acknowledgement, never a report — it
-        # is deliberately discarded so it cannot displace the real answer.
-        self._budget_exhausted = False
+        return self.recorder.reminder()
 
     def _ensure_items_recorded(self, graph, cfg: dict, answer: str) -> None:
         """Guarantee a recording pass whenever the store is still empty.
 
-        ``_record_before_writeup`` only runs when a turn dies on the step budget.
-        A model that instead finishes its rounds *normally* — writing a complete
-        prose report but never calling report_finding / report_test_case — leaves
-        /findings and /testcases empty. This is the common failure for small
-        local models, which drift to prose and skip the capture tools.
-
-        So: if this agent can record but nothing has been captured yet, run one
-        focused pass that feeds the report back and asks the model to transcribe
-        each item into a structured call. Transcribing a report it already wrote
-        is a far easier task than the original review, so a weak model that
-        skipped the tools mid-run tends to succeed here.
+        The budget-exhaustion path (:meth:`_wrap_up_if_exhausted`) only runs when
+        a turn dies on the step budget. A model that instead finishes its rounds
+        *normally* — writing a complete prose report but never calling the
+        capture tools — leaves /findings and /testcases empty, the common failure
+        for small local models. The recorder decides whether a pass is warranted
+        (returns the transcription prompt, or None to skip); we drive it, then
+        fall back to deterministic prose extraction if the model still recorded
+        nothing.
         """
-        names = self._recording_tools()
-        if not names:
-            return  # e.g. threat_model records nothing structured
-        from .runtime import peek_findings, peek_test_cases
-
-        if peek_findings() or peek_test_cases():
-            return  # the model already recorded as it went — nothing to backfill
-        report = (answer or "").strip()
-        if not report:
-            return  # no prose to transcribe; the budget-exhaustion path handles this
-        # Keep the fed-back report inside the model's window — on a 16k local
-        # context a long report plus the standing conversation would overflow.
-        from .llm import prompt_char_budget
-
-        cap = max(2_000, prompt_char_budget(self.config.llm) // 2)
-        if len(report) > cap:
-            report = report[:cap] + "\n… [report truncated for the recording pass]"
-        listed = " and ".join(f"`{n}`" for n in names)
+        prompt = self.recorder.transcription_prompt(answer)
+        if prompt is None:
+            return
         self._note(
             f"{self.spec.name}: nothing recorded yet — transcribing the report "
             "into trackable items"
         )
-        prompt = (
-            "Your written report is complete, but you have not RECORDED any of "
-            "its items — so /findings and /testcases are still empty and the "
-            "operator cannot track them. Do NOT read, search, or scan anything "
-            "further.\n\n"
-            f"Go through the report below and call {listed} once for EACH "
-            "distinct item it describes, using the exact title, file/line, "
-            "severity and other details already written there. These are the "
-            "only tool calls you may make now. Record every item — an item only "
-            "in prose does not exist for the operator. When done, reply DONE.\n\n"
-            "--- REPORT ---\n" + report
-        )
         self._drive(graph, prompt, {**cfg, "recursion_limit": self._RECORD_STEPS})
         self._budget_exhausted = False  # this pass may exhaust its own small budget
-
-        # A weak local model may STILL not have emitted the tool calls (it just
-        # replies "DONE"). Rather than depend on it, parse the report it already
-        # wrote into structured items deterministically. This is the reliable
-        # backstop that finally populates /findings and /testcases.
-        if not peek_findings() and not peek_test_cases():
-            self._record_from_prose(answer)
-
-    def _record_from_prose(self, answer: str) -> None:
-        """Deterministically extract findings / test cases from the prose report.
-
-        No model call, no tools — parses the text the agent already produced. The
-        last line of defence for models that never emit capture calls at all.
-        """
-        from . import extract
-        from .runtime import record_finding, record_test_case
-        from .tools.common import workspace
-
-        recorders = self._recording_tools()
-        n_f = n_t = 0
-        if "report_finding" in recorders:
-            for f in extract.findings_from_report(
-                answer, source_agent=self.spec.name, workspace=workspace()
-            ):
-                if record_finding(f):
-                    n_f += 1
-        if "report_test_case" in recorders:
-            for tc in extract.test_cases_from_report(
-                answer, source_agent=self.spec.name
-            ):
-                if record_test_case(tc):
-                    n_t += 1
-        if n_f or n_t:
-            got = ", ".join(
-                p
-                for p in (
-                    f"{n_f} finding(s)" if n_f else "",
-                    f"{n_t} test case(s)" if n_t else "",
-                )
-                if p
-            )
-            self._note(
-                f"{self.spec.name}: recovered {got} from the report text "
-                "(model did not record them)"
-            )
+        # A weak model may STILL not have emitted the tool calls (it just replies
+        # "DONE"); the deterministic backstop finally populates the stores.
+        if self.recorder.nothing_recorded():
+            self.recorder.record_from_prose(answer)
 
     def _wrap_up_if_exhausted(self, graph, cfg: dict, answer: str) -> str:
         """Ask for a write-up when a turn died on the step budget.
@@ -443,12 +351,22 @@ class Agent:
         Hitting ``max_steps`` used to raise straight out of the agent and fail
         the whole task, discarding every tool result the model had gathered. A
         model deep in a tool loop has usually seen enough to write *something*,
-        so it gets one short turn to record its findings and one to write up.
+        so it gets one short turn to record its findings (if it has capture
+        tools) and one to write up.
         """
         if not self._budget_exhausted:
             return answer
         self._note(f"{self.spec.name}: step budget spent — writing up what it has")
-        self._record_before_writeup(graph, cfg)
+        # Persist confirmed items before the write-up round tells the model to
+        # stop calling tools — which silently includes the capture ones.
+        record_prompt = self.recorder.writeup_prompt()
+        if record_prompt:
+            self._note(f"{self.spec.name}: recording confirmed items before write-up")
+            self._drive(
+                graph, record_prompt, {**cfg, "recursion_limit": self._RECORD_STEPS}
+            )
+            # The record turn's text is bookkeeping, never a report — discarded.
+            self._budget_exhausted = False
         wrap_cfg = {**cfg, "recursion_limit": self._FINALIZE_STEPS}
         answer = self._best(self._drive(graph, self._FINALIZE_PROMPT, wrap_cfg), answer)
         self._budget_exhausted = False  # the wrap-up turn may exhaust its own
@@ -498,103 +416,12 @@ class Agent:
             ]
         )
 
-    # -------------------------------------------------- structured findings
+    # ------------------------ structured findings / test cases (see RunRecorder)
     def _append_structured_findings(self, answer: str) -> str:
-        """Render any validated findings captured during the run into the report."""
-        from .runtime import take_findings
+        return self.recorder.append_findings(answer)
 
-        findings = take_findings()
-        if not findings:
-            # An agent that *can* record but didn't leaves /findings and
-            # generate_report empty while the prose report is full of
-            # vulnerabilities — say so, rather than letting the operator
-            # discover it later and conclude nothing was found.
-            if "report_finding" in self._recording_tools():
-                self._note(
-                    f"{self.spec.name}: no structured findings recorded — "
-                    "/findings will be empty for this run"
-                )
-            return answer
-        from .models.findings import dedupe_findings
-
-        findings = dedupe_findings(findings)
-        order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
-        findings.sort(key=lambda f: (order.get(f.severity, 5), -f.confidence))
-        self._note(f"{self.spec.name}: recorded {len(findings)} structured finding(s)")
-        self._persist_findings(findings)
-        n_unconf = sum(1 for f in findings if f.status == "unconfirmed")
-        n_grounded = len(findings) - n_unconf
-        parts = [
-            "",
-            "---",
-            "## Structured Findings (validated)",
-            f"_{len(findings)} finding(s): {n_grounded} grounded, {n_unconf} "
-            "unconfirmed. Evidence checked against the workspace._",
-            "",
-        ]
-        for f in findings:
-            parts.append(f.to_markdown())
-            parts.append("")
-        return answer + "\n".join(parts)
-
-    def _persist_findings(self, findings: list) -> None:
-        """Record this run's findings into the durable cross-run history store.
-
-        Best-effort: history is a convenience layer, never allowed to fail a run
-        — but a failure is *reported*, because the store is what ``/findings``
-        triage reads, and silently dropping a run's findings looks identical to
-        having found nothing.
-        """
-        try:
-            from .store import FindingStore, TaintStore
-
-            run_id = getattr(self, "_run_id", "")
-            FindingStore(self.config).upsert(findings, run_id=run_id)
-            TaintStore(self.config).upsert(findings, run_id=run_id)
-        except Exception as e:
-            self._note(f"could not write finding history: {e}")
-
-    # ---------------------------------------------------- structured test cases
     def _append_structured_test_cases(self, answer: str) -> str:
-        """Persist any test cases authored this run and append them to the report."""
-        from .runtime import take_test_cases
-
-        cases = take_test_cases()
-        if not cases:
-            if "report_test_case" in self._recording_tools():
-                self._note(
-                    f"{self.spec.name}: no test cases recorded — "
-                    "/testcases will be empty for this run"
-                )
-            return answer
-        from .models.testcases import dedupe_test_cases
-
-        cases = dedupe_test_cases(cases)
-        order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
-        cases.sort(key=lambda t: order.get(t.severity, 5))
-        self._note(f"{self.spec.name}: recorded {len(cases)} test case(s)")
-        self._persist_test_cases(cases)
-        parts = [
-            "",
-            "---",
-            "## Test Cases (tracked)",
-            f"_{len(cases)} test case(s) added to the backlog — track them with "
-            "`/testcases`._",
-            "",
-        ]
-        for tc in cases:
-            parts.append(tc.to_markdown())
-            parts.append("")
-        return answer + "\n".join(parts)
-
-    def _persist_test_cases(self, cases: list) -> None:
-        """Merge authored test cases into the durable backlog (progress preserved)."""
-        try:
-            from .store import TestCaseStore
-
-            TestCaseStore(self.config).upsert(cases)
-        except Exception as e:
-            self._note(f"could not write test-case backlog: {e}")
+        return self.recorder.append_test_cases(answer)
 
     def _incomplete_sections(self, text: str) -> list[str]:
         low = (text or "").lower()

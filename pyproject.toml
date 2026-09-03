@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phrak-agent"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local AppSec multi-agent toolkit with codebase Q&A (RAG)"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "langchain>=1.0",
@@ -19,13 +20,22 @@ dependencies = [
 ]
 
 [project.scripts]
+# `phrakagent [DIR]` launches PHRAK chat in DIR (default: the current directory).
+# `phrak` is the full CLI (run / agent / ask / findings / …).
+phrakagent = "appsec.cli:phrak_agent_main"
 phrak = "appsec.cli:main"
 
-[tool.setuptools]
-packages = ["appsec", "appsec.agents", "appsec.tools", "appsec.models", "appsec.analyzers"]
+# Auto-discover appsec and all its sub-packages so the list can't drift as new
+# ones are added.
+[tool.setuptools.packages.find]
+include = ["appsec*"]
 
+# Ship the non-.py assets the tools load at runtime: the curated skill playbooks
+# and the bundled Opengrep taint rulesets. Without these a pip-installed PHRAK
+# would lose its skills and its taint scanner.
 [tool.setuptools.package-data]
 appsec = ["skills/*/*.md"]
+"appsec.analyzers" = ["rules/*.yaml", "rules/*/*.yaml", "rules/*/*/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

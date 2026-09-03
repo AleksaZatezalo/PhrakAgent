@@ -133,6 +133,52 @@ def _exclusive(path: Path):
             handle.close()
 
 
+# ================================================================= base store
+class JsonlStore:
+    """Shared plumbing for the ``.phrack/*.jsonl`` stores.
+
+    Holds the on-disk location and the read / write / lookup helpers every store
+    needs, so those aren't re-implemented three times. Subclasses add their own
+    ``_load`` / ``_save`` serialization (dataclass vs raw dict, and the order the
+    file is written in) and their mutation API; every mutation still wraps a
+    :func:`_exclusive` read-modify-write on ``self.path``.
+    """
+
+    def __init__(self, config: Config, subdir: str, filename: str) -> None:
+        self.config = config
+        self.dir = config.phrack_dir / subdir
+        self.path = self.dir / filename
+
+    def _read(self) -> list[dict]:
+        return _read_jsonl(self.path)
+
+    def _write(self, records: list[dict]) -> None:
+        _write_jsonl(self.path, records)
+
+    @staticmethod
+    def _find(records: dict, ident: str, *, id_attr: str = "id", fp_attr: str = "fingerprint"):
+        """Resolve ``ident`` to a record. Exact id / fingerprint first, then a
+        short id-suffix or fingerprint-prefix. None if nothing matches.
+
+        Shared by the finding and test-case stores, whose records both expose an
+        ``id`` and a ``fingerprint``; keeping one matcher stops the two lookup
+        semantics from drifting apart.
+        """
+        ident = (ident or "").strip()
+        if not ident:
+            return None
+        for r in records.values():
+            if ident in (getattr(r, id_attr), getattr(r, fp_attr)):
+                return r
+        low = ident.lower()
+        for r in records.values():
+            if getattr(r, id_attr).lower().endswith(low) or getattr(
+                r, fp_attr
+            ).lower().startswith(low):
+                return r
+        return None
+
+
 # =====================================================================finding
 @dataclass
 class FindingRecord:
@@ -179,22 +225,20 @@ class FindingRecord:
         )
 
 
-class FindingStore:
+class FindingStore(JsonlStore):
     """Durable, fingerprint-keyed finding history under ``.phrack/findings``."""
 
     def __init__(self, config: Config) -> None:
-        self.config = config
-        self.dir = config.phrack_dir / "findings"
-        self.path = self.dir / "findings.jsonl"
+        super().__init__(config, "findings", "findings.jsonl")
 
     # ------------------------------------------------------------- load/save
     def _load(self) -> dict[str, FindingRecord]:
-        recs = [FindingRecord.from_dict(r) for r in _read_jsonl(self.path)]
+        recs = [FindingRecord.from_dict(r) for r in self._read()]
         return {r.fingerprint: r for r in recs if r.fingerprint}
 
     def _save(self, records: dict[str, FindingRecord]) -> None:
         ordered = sorted(records.values(), key=lambda r: r.last_seen, reverse=True)
-        _write_jsonl(self.path, [r.to_dict() for r in ordered])
+        self._write([r.to_dict() for r in ordered])
 
     # ------------------------------------------------------------- write path
     def upsert(
@@ -380,34 +424,17 @@ class FindingStore:
     def get(self, ident: str) -> Optional[FindingRecord]:
         return self._find(self._load(), ident)
 
-    @staticmethod
-    def _find(records: dict[str, FindingRecord], ident: str) -> Optional[FindingRecord]:
-        ident = (ident or "").strip()
-        if not ident:
-            return None
-        for r in records.values():
-            if ident in (r.id, r.fingerprint):
-                return r
-        # short prefix on id or fingerprint
-        low = ident.lower()
-        for r in records.values():
-            if r.id.lower().endswith(low) or r.fingerprint.lower().startswith(low):
-                return r
-        return None
-
 
 # =======================================================================taint
-class TaintStore:
+class TaintStore(JsonlStore):
     """Durable history of taint paths, keyed by their stable id."""
 
     def __init__(self, config: Config) -> None:
-        self.config = config
-        self.dir = config.phrack_dir / "taint"
-        self.path = self.dir / "taint.jsonl"
+        super().__init__(config, "taint", "taint.jsonl")
 
     def _load(self) -> dict[str, dict]:
         out: dict[str, dict] = {}
-        for r in _read_jsonl(self.path):
+        for r in self._read():
             tid = r.get("id")
             if tid:
                 out[tid] = r
@@ -417,7 +444,7 @@ class TaintStore:
         ordered = sorted(
             records.values(), key=lambda r: r.get("last_seen", ""), reverse=True
         )
-        _write_jsonl(self.path, ordered)
+        self._write(ordered)
 
     def upsert(
         self, findings: list[SecurityFinding], run_id: str = "", ts: str = ""
@@ -485,7 +512,7 @@ class TaintStore:
 
 
 # ===================================================================test cases
-class TestCaseStore:
+class TestCaseStore(JsonlStore):
     """Durable test-case backlog under ``.phrack/testcases``.
 
     Unlike findings — which the agents own and a human triages — test cases are
@@ -495,14 +522,12 @@ class TestCaseStore:
     """
 
     def __init__(self, config: Config) -> None:
-        self.config = config
-        self.dir = config.phrack_dir / "testcases"
-        self.path = self.dir / "testcases.jsonl"
+        super().__init__(config, "testcases", "testcases.jsonl")
 
     # ------------------------------------------------------------- load/save
     def _load(self) -> dict[str, SecurityTestCase]:
         out: dict[str, SecurityTestCase] = {}
-        for raw in _read_jsonl(self.path):
+        for raw in self._read():
             tc = SecurityTestCase.from_dict(raw)
             tc.ensure_identity()
             if tc.fingerprint:
@@ -513,7 +538,7 @@ class TestCaseStore:
         ordered = sorted(
             records.values(), key=lambda t: (t.created_at, t.id), reverse=False
         )
-        _write_jsonl(self.path, [t.to_dict() for t in ordered])
+        self._write([t.to_dict() for t in ordered])
 
     # ------------------------------------------------------------ write path
     def upsert(self, cases: list[SecurityTestCase]) -> list[SecurityTestCase]:
@@ -609,22 +634,6 @@ class TestCaseStore:
 
     def get(self, ident: str) -> Optional[SecurityTestCase]:
         return self._find(self._load(), ident)
-
-    @staticmethod
-    def _find(
-        records: dict[str, SecurityTestCase], ident: str
-    ) -> Optional[SecurityTestCase]:
-        ident = (ident or "").strip()
-        if not ident:
-            return None
-        for t in records.values():
-            if ident in (t.id, t.fingerprint):
-                return t
-        low = ident.lower()
-        for t in records.values():
-            if t.id.lower().endswith(low) or t.fingerprint.lower().startswith(low):
-                return t
-        return None
 
 
 # =====================================================================rendering

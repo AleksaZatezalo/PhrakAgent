@@ -15,6 +15,19 @@ from typing import Any
 # --------------------------------------------------------------- vocabularies
 SEVERITIES = ("critical", "high", "medium", "low", "info")
 
+
+def severity_rank(severity: str) -> int:
+    """Sort key for a severity label: 0 = most severe, unknown sorts last.
+
+    The single source of truth for "order findings/test cases by severity",
+    shared by the agent, the report writer, and the salvage path so they can
+    never disagree on where an unrecognised severity lands.
+    """
+    try:
+        return SEVERITIES.index(severity)
+    except ValueError:
+        return len(SEVERITIES)
+
 # A finding's lifecycle status.
 STATUSES = (
     "new",

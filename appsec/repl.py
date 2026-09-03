@@ -10,41 +10,14 @@ from .banner import CYAN, GREEN, GREY, RESET
 
 
 def command_names(app) -> list[str]:
-    """All slash-command names available in chat, including dynamic agents."""
-    names = [
-        "help",
-        "agents",
-        "ask",
-        "index",
-        "run",
-        "route",
-        "see_threatmodel",
-        "see_codereview",
-        "findings",
-        "finding",
-        "finding-add",
-        "triage",
-        "note",
-        "testcases",
-        "testcase",
-        "testcase-add",
-        "testcase-status",
-        "testcase-link",
-        "testcase-note",
-        "clone",
-        "config",
-        "clear",
-        "model",
-        "cost",
-        "verbose",
-        "quit",
-    ]
-    names += list(app.registry.names())
-    # de-dupe while preserving order
-    seen: dict[str, None] = {}
-    for n in names:
-        seen.setdefault(n, None)
-    return list(seen)
+    """All slash-command names available in chat, including dynamic agents.
+
+    Delegates to the command registry so the /command list, Tab-complete, and
+    dispatch never drift out of sync.
+    """
+    from .chat_commands import command_names as _names
+
+    return _names(app)
 
 
 def setup_readline(app) -> list[str]:
@@ -115,74 +88,14 @@ def _save_history(readline, hist_file) -> None:
 
 
 def chat_help(app) -> None:
-    """Print the grouped list of chat slash commands."""
-    groups: list[tuple[str, list[tuple[str, str]]]] = [
-        (
-            "analyze",
-            [
-                ("/ask <text>", "answer a question grounded in the codebase (RAG)"),
-                ("/index [--rebuild|--stats]", "refresh the code index (no AI)"),
-                ("/run <text>", "full multi-agent assessment + saved report"),
-                ("/route <text>", "auto-route to the single best-fit agent"),
-                ("/see_threatmodel", "replay the latest threat_model report"),
-                ("/see_codereview", "replay the latest code_review report"),
-            ],
-        ),
-        (
-            "agents",
-            [
-                # An assembly agent (generate_report) works from what's already
-                # stored, so it is shown without a task argument.
-                (
-                    f"/{n}" if app.registry.get(n).runner else f"/{n} <text>",
-                    app.registry.get(n).description,
-                )
-                for n in app.registry.names()
-            ]
-            + [("/agents [--verbose]", "list agents (and their tools)")],
-        ),
-        (
-            "findings",
-            [
-                ("/findings [filters]", "list recorded findings across all runs"),
-                ("/finding <id>", "one finding in full: evidence, history, notes"),
-                ("/finding-add", "record a finding you verified yourself (no AI)"),
-                ("/triage <id> <status>", "record your verdict (add a note after it)"),
-                ("/note <id> <text>", "attach a reviewer note"),
-            ],
-        ),
-        (
-            "test cases",
-            [
-                ("/testcases [filters]", "the test-case backlog as a checklist"),
-                ("/testcase <id>", "one test case in full"),
-                ("/testcase-add", "write a test case by hand (no AI)"),
-                ("/testcase-status <id> <s>", "new | in_progress | complete [result]"),
-                ("/testcase-link <id> <fnd>", "tie a test to the finding it verifies"),
-                ("/testcase-note <id> <text>", "record what happened when you ran it"),
-            ],
-        ),
-        (
-            "session",
-            [
-                ("/clear", "forget the conversation so far"),
-                ("/model [name]", "show or switch the chat model"),
-                ("/cost", "tokens and estimated spend this session"),
-                ("/verbose", "toggle full tool output"),
-            ],
-        ),
-        (
-            "system",
-            [
-                ("/clone <url> [dest] [--index]", "shallow-clone a repo to analyze"),
-                ("/config [--show]", "setup wizard (or show redacted config)"),
-                ("/help", "show this list"),
-                ("/quit", "exit PHRAK"),
-                ("<text>", "just chat — PHRAK reads code and answers, keeping context"),
-                ("@path/to/file", "inline a workspace file into your message"),
-            ],
-        ),
-    ]
+    """Print the grouped list of chat slash commands.
+
+    The command rows come from the shared registry (see
+    :mod:`appsec.chat_commands`); this function only lays them out.
+    """
+    from .chat_commands import help_groups
+
+    groups = help_groups(app)
     all_rows = [r for _, rows in groups for r in rows]
     width = max(len(c) for c, _ in all_rows)
     for title, rows in groups:

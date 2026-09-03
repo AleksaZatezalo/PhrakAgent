@@ -20,6 +20,7 @@ from typing import Optional
 
 from .config import Config
 from .llm import message_text
+from .models.findings import severity_rank
 
 # Agents whose latest saved report becomes a section of the consolidated one.
 SECTION_AGENTS = [
@@ -122,11 +123,10 @@ def _findings_section(config: Config) -> tuple[str, str]:
             "`/finding-add`._",
             "(none recorded)",
         )
-    order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     records = sorted(
         records,
         key=lambda r: (
-            order.get(r.as_finding().severity, 5),
+            severity_rank(r.as_finding().severity),
             -r.as_finding().confidence,
         ),
     )

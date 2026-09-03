@@ -92,10 +92,27 @@ invoked by hand, once the work it reports on exists.
 
 ```bash
 python -m venv venv && source venv/bin/activate
-pip install -e .                       # installs the `phrak` command
+pip install -e .                       # installs the `phrak` and `phrakagent` commands
 # then install Ollama (https://ollama.com) and pull a model:
 ollama pull qwen2.5-coder:7b
 ```
+
+This installs two commands:
+
+- **`phrakagent [DIR]`** — launch a PHRAK chat session scoped to `DIR`
+  (defaults to the current directory). This is the quickest way in:
+
+  ```bash
+  phrakagent /path/to/project     # chat about that project's code
+  phrakagent                      # chat about the current directory
+  ```
+
+  `DIR` becomes the workspace: the root the file tools read, and where
+  `.phrack/` (config, code index, findings, reports) is anchored. Trailing
+  arguments pass through to the full CLI, e.g. `phrakagent /proj run "assess this app"`.
+
+- **`phrak`** — the full CLI (`run` / `agent` / `ask` / `findings` / `config` / …),
+  with `-w/--workspace` to point at a directory.
 
 (Or, without installing: `pip install -r requirements.txt` and use `python cli.py …`.)
 

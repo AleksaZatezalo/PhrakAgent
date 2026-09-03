@@ -97,6 +97,19 @@ def test_human_verdict_preserved_across_runs(config):
     assert rec.resurfaced is True
 
 
+def test_finding_lookup_by_id_suffix_fingerprint_prefix_and_miss(config):
+    # The shared JsonlStore._find: exact id, short id-suffix, fingerprint-prefix,
+    # and a clean miss — the same matcher the test-case store relies on.
+    store = FindingStore(config)
+    store.upsert([_finding()], run_id="r1")
+    rec = store.list()[0]
+    # each _load() rebuilds records from disk, so match on id, not identity
+    assert store.get(rec.id).id == rec.id  # exact id
+    assert store.get(rec.id[-6:]).id == rec.id  # short id suffix
+    assert store.get(rec.fingerprint[:10]).id == rec.id  # fingerprint prefix
+    assert store.get("definitely-not-here") is None
+
+
 def test_runtime_track_is_independent(config):
     store = FindingStore(config)
     store.upsert([_finding(status="new")], run_id="r1")
