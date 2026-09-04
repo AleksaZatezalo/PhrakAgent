@@ -134,6 +134,47 @@ def _h_ask(ctx: ChatContext) -> None:
     print()
 
 
+def _fmt_duration(seconds: float) -> str:
+    """A compact ``mm:ss`` / ``s`` label for a run's wall-clock time."""
+    seconds = max(0.0, float(seconds))
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    m, s = divmod(int(round(seconds)), 60)
+    return f"{m}m{s:02d}s"
+
+
+def render_run_summary(result: dict) -> None:
+    """Print a one-glance recap of a finished run: step outcomes, how many
+    findings / test cases it recorded, and how long it took. Reads only the
+    ``run``/``run_single`` result dict, so it is safe for both plan and route."""
+    tasks = result.get("dag") or result.get("plan") or []
+    done = sum(1 for t in tasks if getattr(t, "status", "done") == "done")
+    failed = sum(1 for t in tasks if getattr(t, "status", "") == "failed")
+    skipped = sum(1 for t in tasks if getattr(t, "status", "") == "skipped")
+
+    mark = {"done": f"{GREEN}✓{RESET}", "failed": f"{RESET}✗{RESET}",
+            "skipped": f"{GREY}–{RESET}"}
+    steps = "  ".join(
+        f"{mark.get(getattr(t, 'status', 'done'), '·')} {t.agent}" for t in tasks
+    )
+
+    print(f"\n{BGREEN}run complete{RESET} {GREY}· {_fmt_duration(result.get('elapsed', 0))}{RESET}")
+    tally = [f"{done} done"]
+    if failed:
+        tally.append(f"{failed} failed")
+    if skipped:
+        tally.append(f"{skipped} skipped")
+    print(f"  steps    :: {', '.join(tally)}")
+    if steps:
+        print(f"             {steps}")
+    nf, nt = result.get("n_findings"), result.get("n_test_cases")
+    if nf is not None or nt is not None:
+        print(f"  recorded :: {nf or 0} finding(s), {nt or 0} test case(s)")
+    if result.get("routed_to"):
+        print(f"  routed   :: {result['routed_to']}")
+    print(f"  report   :: {CYAN}{result.get('report_path', '?')}{RESET}")
+
+
 def _h_run(ctx: ChatContext) -> None:
     from .cli import _land_report
 
@@ -148,6 +189,7 @@ def _h_run(ctx: ChatContext) -> None:
     print()
     render_markdown(result["report"])
     _land_report(app, result["report_path"])
+    render_run_summary(result)
     print()
 
 

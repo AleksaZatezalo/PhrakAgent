@@ -456,9 +456,11 @@ class Orchestrator:
         {"plan", "steps", "dag", "report", "report_path"}."""
         import concurrent.futures as cf
         import threading
+        import time
 
         from .store import FindingStore, TestCaseStore
 
+        t0 = time.monotonic()
         # Snapshot the durable stores so we can tell whether the agents recorded
         # anything THIS run. If they did, we trust their precise items; if they
         # didn't (a weak model that only wrote prose), we salvage the findings
@@ -586,6 +588,12 @@ class Orchestrator:
             "dag": tasks,
             "report": report,
             "report_path": report_path,
+            # Per-run tallies for the completion summary. The stores dedupe on
+            # upsert, so these are net-new items recorded this run (agent-captured
+            # or salvaged), not the durable cross-run totals.
+            "n_findings": len(FindingStore(self.config).list()) - n_find_before,
+            "n_test_cases": len(TestCaseStore(self.config).list()) - n_tc_before,
+            "elapsed": time.monotonic() - t0,
         }
 
     # ---------------------------------------------------------- synthesize
