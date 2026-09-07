@@ -821,22 +821,6 @@ Evidence:
 - app/db.py:84-96 — string-formatted SQL passed to execute()
 ```
 
-## Skills
-
-- **Curated skills** ship under `appsec/skills/<agent>/*.md` and encode each
-  specialist's baseline methodology (threat_model: architecture · data-flow ·
-  PASTA · threat-details · executive-summary; code_review: OWASP A01–A10;
-  test_case: deriving-test-cases · test-case-design · abuse-case-enumeration ·
-  prioritization). `code_review` has every curated skill inlined into its prompt
-  and applies them all; skill-heavy agents (`threat_model`, `test_case`) instead
-  get a one-line skill index and pull each full procedure on demand via
-  `load_skill`, keeping the prompt within the model's context window.
-- **Saved skills** live under `.phrack/skills/*.md` (per-workspace) or
-  `~/.phrak/skills/*.md` (global, applies to every workspace; a workspace entry
-  overrides a global one of the same name). PHRAK does not auto-author skills —
-  drop your own markdown files into either directory. The most relevant ones are
-  surfaced into later prompts by lexical relevance.
-
 ## Usability & customization
 
 Quality-of-life features for daily use (none affect the security posture):
@@ -1019,44 +1003,6 @@ An `integration` marker is registered in `pyproject.toml` for tests that need a
 running Ollama or a live target; no test currently claims it, so
 `pytest -m "not integration"` and a bare `pytest` run the same set.
 
-## Roadmap
-
-PHRAK was built incrementally on one architecture. All landed work:
-
-- **Foundations** — local-first `.phrack/` layout, Ollama provider, live
-  activity logging, curated + user-added skills.
-- **Structured findings** — validated, workspace-grounded `SecurityFinding`
-  model with stable fingerprints, taint-path references, and dedup.
-- **Security test cases** — a read-only test-case agent that turns findings and
-  threats into a prioritized, traceable manual test plan (no live testing / no
-  target traffic).
-- **OpenGrep** as the sole static analyzer + analyzer→finding normalization,
-  dependency audit (pip/npm/go/cargo), and a context-sensitive sanitizer table.
-- **History & scope** — persistent cross-run finding/taint history with separate
-  agent/runtime/human status tracks, and a declarative scope policy
-  (`.phrack/scope.yaml`).
-- **DAG orchestration** — dependency-graph planning with bounded parallel
-  fan-out and partial-failure isolation, and a disagreement-preserving
-  synthesizer.
-- **Taint mode** — bundled OpenGrep dataflow rules (Python, JS/TS) as the
-  confirmed-lead source, gating `confirmed` status on a real source→sink path,
-  plus semantic `rag_search` for finding sibling instances of a bug pattern.
-- **Runtime verification** — the opt-in `verify` agent, proving exploitability
-  with a minimal PoC inside a locked-down container and promoting the finding's
-  runtime status via `record_poc_result` only when it lands.
-- **Injection-hardened tool rescue** — verbalized-call extraction narrowed to
-  fenced blocks, with example-framing, inline code, and blockquotes excluded.
-- **Capture reliability** — findings and test cases land in the backlog even when
-  a weak local model writes a report but never calls the capture tools: a
-  guaranteed recording pass, then deterministic extraction of the report text
-  (`appsec/extract.py`), applied per-agent and again on the consolidated report.
-- **Operator workflow** — a non-agentic layer over the agents' output: hand-
-  entered verified findings, a trackable test-case backlog (status, result,
-  notes, finding links), and `generate_report` to assemble the engagement into
-  one deliverable.
-- **Usability & extensibility** — `--quiet`/`--json`/`--no-color`, grouped
-  `/help`, `/agents --verbose`, no-AI `phrak clone`, `@file` attachment, and the
-  `/findings` triage surface over the cross-run store.
 
 ## Project layout
 
@@ -1107,12 +1053,6 @@ cli.py              thin shim so `python cli.py …` still works
 tests/              pytest bench (unit + marker-gated integration)
 ```
 
-## Security
-
-- **Found a vulnerability in PHRAK itself?** See [`SECURITY.md`](SECURITY.md) —
-  report it privately, don't open a public issue.
-- **Findings PHRAK has produced** are logged in [`FINDINGS.md`](FINDINGS.md).
-
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) — dev setup, the `black` / `ruff` style
@@ -1120,7 +1060,3 @@ rules, the mandatory module-header docstring, and the architecture invariants a
 PR must not break (read-only agents, no network without opt-in, OpenGrep as the
 sole static analyzer). False positives and missed findings belong in a normal
 issue; vulnerabilities in PHRAK itself go to [`SECURITY.md`](SECURITY.md).
-
-## License
-
-MIT — see [`LICENSE`](LICENSE).
