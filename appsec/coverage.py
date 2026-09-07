@@ -24,6 +24,7 @@ from __future__ import annotations
 import re
 
 from .config import Config
+from .models.findings import SecurityFinding
 from .models.testcases import SecurityTestCase
 
 # Generic words that carry no matching signal between a finding and a test case.
@@ -47,7 +48,7 @@ def _tokens(text: str) -> set[str]:
     return out
 
 
-def _finding_target(f) -> str:
+def _finding_target(f: SecurityFinding) -> str:
     """What the verification test actually targets — a real location when we have
     one, otherwise an honest pointer back to the finding."""
     if f.evidence and f.evidence[0].path:
@@ -57,7 +58,9 @@ def _finding_target(f) -> str:
     return f"component described in {f.id}"
 
 
-def _match_finding(case: SecurityTestCase, findings: list) -> "object | None":
+def _match_finding(
+    case: SecurityTestCase, findings: list[SecurityFinding]
+) -> SecurityFinding | None:
     """The finding a test case unambiguously verifies, or None.
 
     Requires the best title-token overlap to be >= 2 AND strictly beat the
@@ -77,7 +80,7 @@ def _match_finding(case: SecurityTestCase, findings: list) -> "object | None":
     return scored[0][1]
 
 
-def _verification_case(f) -> SecurityTestCase:
+def _verification_case(f: SecurityFinding) -> SecurityTestCase:
     """A minimal, honest verification test case for a finding with no coverage."""
     target = _finding_target(f)
     desc = (f.description or f.title).strip()

@@ -32,6 +32,15 @@ def test_normalize_url_adds_scheme():
     assert common.normalize_url("https://x") == "https://x"
 
 
+@pytest.mark.parametrize("bad", ["echo hi", "", []])
+def test_run_cli_rejects_non_argv_list(bad):
+    # A shell string (or empty cmd) must be rejected outright: there is no
+    # shell=True, so a string would be misread char-by-char and could become a
+    # shell-injection sink if shell=True were ever added.
+    with pytest.raises(ValueError):
+        common.run_cli(bad, timeout=5)
+
+
 @pytest.mark.parametrize(
     "host,expected",
     [

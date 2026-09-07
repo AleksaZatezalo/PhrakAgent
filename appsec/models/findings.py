@@ -10,6 +10,7 @@ import hashlib
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 # --------------------------------------------------------------- vocabularies
@@ -488,11 +489,9 @@ def validate_finding(f: SecurityFinding) -> list[str]:
     return errs
 
 
-def validate_against_workspace(f: SecurityFinding, root) -> list[str]:
+def validate_against_workspace(f: SecurityFinding, root: str | Path) -> list[str]:
     """Ground evidence in the actual repo: paths inside workspace, valid lines,
     snippets approximately matching source. Returns errors (empty = ok)."""
-    from pathlib import Path
-
     root = Path(root).resolve()
     errs: list[str] = []
 
