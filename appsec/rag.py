@@ -352,7 +352,10 @@ class CodeIndex:
     # ------------------------------------------------------------- retrieve
     def search(self, query: str, k: Optional[int] = None) -> list[tuple[str, str]]:
         """Return ``[(source_header, excerpt_text), ...]`` for the query."""
-        k = k or self.rag.recall_k
+        # Clamp to at least 1: a caller passing k<=0, or a misconfigured
+        # recall_k, would otherwise make similarity_search raise and the broad
+        # except below turn a config bug into a silent "no results" answer.
+        k = max(1, k or self.rag.recall_k)
         try:
             docs = self.store.similarity_search(query, k=k)
         except Exception:
