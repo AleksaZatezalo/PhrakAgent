@@ -118,6 +118,12 @@ def run_cli(
             log_syscall_result(msg, ok=False)
         return CliResult(error=f"{binary} is not installed / not on PATH.")
 
+    if isinstance(cmd, str) or not cmd:
+        raise ValueError(
+            "run_cli expects a non-empty argv list, not a shell string "
+            "(there is no shell=True; args must be a list)"
+        )
+
     binary = cmd[0]
     if require_bin and not shutil.which(binary):
         return _missing()
