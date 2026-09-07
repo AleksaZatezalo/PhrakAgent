@@ -92,6 +92,7 @@ def _norm(text: str | None) -> str:
 
 
 def status_transition_allowed(current: str, new: str) -> bool:
+    """Human-readable ``path:line — expression`` label for the node."""
     if new not in STATUSES:
         return False
     return new in _STATUS_TRANSITIONS.get(current, set())
@@ -126,6 +127,7 @@ class TaintStep:
     to_expression: str | None = None
 
     def label(self) -> str:
+        """Human-readable ``path:line — operation`` label for the hop."""
         loc = self.path + (f":{self.line}" if self.line else "")
         op = f" — {self.operation}" if self.operation else ""
         return f"{loc}{op}"
@@ -146,6 +148,9 @@ class TaintPathReference:
     analysis_mode: str = "syntactic"  # one of ANALYSIS_MODES
 
     def compute_id(self) -> str:
+        """Deterministic ``TP-<hash>`` id from the source/sink location and
+        expressions, so the same path gets the same id across runs.
+        """
         basis = "|".join(
             [
                 _norm(self.source.path),
@@ -159,6 +164,7 @@ class TaintPathReference:
         return "TP-" + hashlib.sha256(basis.encode()).hexdigest()[:12]
 
     def ensure_id(self) -> str:
+        """Populate ``id`` from :meth:`compute_id` if unset; return it."""
         if not self.id:
             self.id = self.compute_id()
         return self.id
@@ -168,6 +174,9 @@ class TaintPathReference:
         return self.completeness in ("complete", "runtime_confirmed")
 
     def to_markdown(self) -> str:
+        """Render the taint path — source, sink, steps, and sanitizers (flagged
+        effective vs. bypassed) — as Markdown.
+        """
         lines = [
             f"**Taint path** `{self.id or self.compute_id()}` "
             f"(mode: {self.analysis_mode}, completeness: {self.completeness}, "
@@ -200,6 +209,10 @@ class TaintPathReference:
 # --------------------------------------------------------------- evidence model
 @dataclass
 class FindingEvidence:
+    """A single piece of evidence backing a finding: a source location (with
+    optional line range, symbol, and snippet), the reason it matters, and an
+    evidence type (one of ``EVIDENCE_TYPES``).
+    """
     path: str = ""
     start_line: int | None = None
     end_line: int | None = None
@@ -323,6 +336,9 @@ class SecurityFinding:
 
     # -- serialization -------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
+        """Serialize to a JSON-safe dict, ensuring identity first and
+        ISO-formatting the timestamps.
+        """
         self.ensure_identity()
         d = asdict(self)
         d["created_at"] = self.created_at.isoformat()
@@ -331,6 +347,10 @@ class SecurityFinding:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "SecurityFinding":
+        """Rebuild a :class:`SecurityFinding` from a stored dict, reconstructing
+        nested evidence and taint paths, parsing timestamps, and dropping unknown
+        keys.
+        """
         raw = dict(raw or {})
         ev = [FindingEvidence(**e) for e in raw.pop("evidence", []) or []]
         tps = [_taint_from_dict(t) for t in raw.pop("taint_paths", []) or []]
@@ -346,6 +366,10 @@ class SecurityFinding:
 
     # -- rendering -----------------------------------------------------------
     def to_markdown(self) -> str:
+        """Render the finding as a Markdown section: header/id, severity, status
+        (with effective-status tracks when they differ), taint path, evidence,
+        and impact/recommendation/disproof.
+        """
         self.ensure_identity()
         cwe = ", ".join(self.cwe_ids) or "—"
         out = [
