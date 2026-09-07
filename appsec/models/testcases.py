@@ -96,6 +96,7 @@ class SecurityTestCase:
         return hashlib.sha256(basis.encode()).hexdigest()[:16]
 
     def ensure_identity(self) -> "SecurityTestCase":
+        """Creates security testcase ID."""
         if not self.fingerprint:
             self.fingerprint = self.compute_fingerprint()
         if not self.id:
@@ -104,6 +105,7 @@ class SecurityTestCase:
 
     # -- serialization -------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
+        """Converts findings to dictionary."""
         self.ensure_identity()
         d = asdict(self)
         d["created_at"] = self.created_at.isoformat()
@@ -112,6 +114,7 @@ class SecurityTestCase:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "SecurityTestCase":
+        """Reads findings from a dictionary."""
         raw = dict(raw or {})
         for key in ("created_at", "updated_at"):
             if isinstance(raw.get(key), str):
@@ -124,6 +127,7 @@ class SecurityTestCase:
 
     # -- rendering -----------------------------------------------------------
     def to_markdown(self) -> str:
+        """Converts the report to markdown format."""
         self.ensure_identity()
         link = self.finding_id or self.threat_ref or "—"
         out = [
