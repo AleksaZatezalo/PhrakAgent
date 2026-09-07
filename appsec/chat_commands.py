@@ -133,6 +133,11 @@ def _h_ask(ctx: ChatContext) -> None:
     _do_ask(ctx.app, question, reindex=reindex)
     print()
 
+def _h_version(ctx: ChatContext) -> None:
+    from . import __version__
+
+    phrak_print(f"phrak {__version__}")
+
 
 def _fmt_duration(seconds: float) -> str:
     """A compact ``mm:ss`` / ``s`` label for a run's wall-clock time."""
@@ -477,6 +482,15 @@ COMMANDS: tuple[Command, ...] = (
         "attach a reviewer note",
         _h_note,
     ),
+
+    Command(
+        ("version",),
+        "system",
+        "/version",
+        "show the PHRAK version",
+        _h_version,
+    ),
+    
     # test cases
     Command(
         ("testcases",),
