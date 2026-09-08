@@ -7,19 +7,35 @@ __pycache__/
 build/
 dist/
 .eggs/
+*.so
+pip-wheel-metadata/
 
 # --- Virtual environments ---
 venv/
 .venv/
 env/
 ENV/
+.python-version
 
 # --- Test / tooling caches ---
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.tox/
+.nox/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+.ipynb_checkpoints/
+
+# --- Secrets / local environment ---
+# credentials.py reads API keys from the environment; never commit a real .env.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
 
 # --- PHRAK per-workspace state (config + index + skills + reports + PoCs) ---
 # Everything PHRAK generates for a workspace lives in .phrack/, including the
@@ -35,6 +51,8 @@ data/
 workspace/
 # SQLite file created at runtime by target/vuln_app.py.
 target/*.db
+# Runtime logs.
+*.log
 
 # --- Editor / OS cruft ---
 .claude/settings.local.json
@@ -43,3 +61,4 @@ target/*.db
 *.swp
 *~
 .DS_Store
+Thumbs.db
