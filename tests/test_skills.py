@@ -16,6 +16,7 @@ THREAT_SKILLS = {
     "data-flow",
     "pasta-threat-analysis",
     "threat-details",
+    "stride-per-element",
 }
 OWASP_SKILLS = {f"a{n:02d}" for n in range(1, 11)}
 
@@ -25,11 +26,13 @@ def test_threat_model_skill_set():
     assert names == THREAT_SKILLS
 
 
-def test_code_review_has_ten_owasp_skills():
+def test_code_review_covers_owasp_top_ten():
     skills = skill_library.for_agent("code_review")
-    assert len(skills) == 10
     prefixes = {s.name.split("-")[0] for s in skills}
-    assert prefixes == OWASP_SKILLS
+    # every OWASP Top 10 category is present (plus cross-cutting methodology skills)
+    assert OWASP_SKILLS <= prefixes
+    names = {s.name for s in skills}
+    assert {"taint-verification", "race-conditions"} <= names
 
 
 def test_skills_have_when_to_use_and_body():
