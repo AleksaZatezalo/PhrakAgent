@@ -1,5 +1,5 @@
 """
-Description: Learned-skills store — agent-authored procedures saved as markdown files.
+Description: Saved-skills store — reusable procedures saved as markdown files.
 Author: Aleksa Zatezalo
 Date Created: 08-01-2026
 """
@@ -12,8 +12,8 @@ from pathlib import Path
 
 from .config import Config
 
-# User-level PHRAK home — skills written here with ``--global`` become part of
-# the agent itself and apply to every subsequent workspace.
+# User-level PHRAK home — skills written here with ``--global`` apply to
+# every subsequent workspace.
 GLOBAL_PHRAK_DIR = Path.home() / ".phrak"
 
 
@@ -27,7 +27,7 @@ def _now() -> str:
 
 
 class SkillStore:
-    """Read/write learned skills as markdown files.
+    """Read/write saved skills as markdown files.
 
     Skills resolve from two scopes: the per-workspace ``paths.skills_dir`` and the
     user-level ``~/.phrak/skills`` (global). A workspace skill overrides a global

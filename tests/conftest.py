@@ -77,7 +77,7 @@ def runtime(config):
 
 @pytest.fixture
 def skills(config):
-    """A learned-skills store backed by a temp skills dir."""
+    """A saved-skills store backed by a temp skills dir."""
     from appsec.skill_store import SkillStore
 
     return SkillStore(config)

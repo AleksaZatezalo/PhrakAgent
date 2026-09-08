@@ -102,7 +102,7 @@ class CodeIndex:
         excluded = set(self.rag.exclude_dirs)
         max_bytes = self.rag.max_file_kb * 1024
         root = self.workspace
-        # Index the workspace's own .phrack artifacts (reports, learned skills,
+        # Index the workspace's own .phrack artifacts (reports, saved skills,
         # config) so /ask can answer questions about them too — but never the
         # vector-store directory itself (that would index the index).
         store_dir = self.config.rag_dir().resolve()

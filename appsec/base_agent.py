@@ -162,7 +162,7 @@ class Agent:
     def _system_prompt(self, task: str) -> str:
         from . import skill_library
 
-        learned = self.skills.skills_block(f"{self.spec.name}: {task}")
+        saved = self.skills.skills_block(f"{self.spec.name}: {task}")
         base = self.spec.system_prompt
         parts = [base]
         # Front-load ALL of this agent's curated skills so it runs every one,
@@ -184,8 +184,8 @@ class Agent:
                 "ask_user; for sensitive actions call request_permission — but "
                 "otherwise keep working to completion."
             )
-        if learned:
-            parts.append(learned)
+        if saved:
+            parts.append(saved)
         return "\n\n".join(parts)
 
     def run(self, task: str, extra_context: str = "") -> str:

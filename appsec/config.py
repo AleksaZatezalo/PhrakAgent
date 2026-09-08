@@ -14,7 +14,7 @@ from typing import Any
 import yaml
 
 # All PHRAK state for a workspace lives under a single ``.phrack/`` directory at
-# the workspace root (like ``.claude``): config, code index, learned skills,
+# the workspace root (like ``.claude``): config, code index, saved skills,
 # and reports.
 PHRACK_DIRNAME = ".phrack"
 CONFIG_FILENAME = "config.yaml"
@@ -140,7 +140,7 @@ class RagConfig:
         ]
     )
     # Note: ``.phrack`` is intentionally NOT excluded — /ask indexes the
-    # workspace's reports/learned-skills/config living there. The vector store
+    # workspace's reports/saved-skills/config living there. The vector store
     # sub-dir (``.phrack/rag``) is skipped by path in CodeIndex._iter_files.
     exclude_dirs: list[str] = field(
         default_factory=lambda: [
