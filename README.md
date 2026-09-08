@@ -16,11 +16,10 @@ the codebase, threat modeling, code review, findings triage, a manual test plan,
 and the final report.** It reads the application; it never touches one.
 
 That boundary is the whole design. PHRAK has **no HTTP client, no proxy, no
-scanner, and no exploit runner**. It sends **zero packets to any target** — not
-in a scan, not in a "safe" probe, not to check whether a host is up. What it
-produces is the artifact a whitebox tester needs: a prioritized set of findings
-grounded in `file:line` evidence, and a test plan **you** execute against a
-system you are authorised to test.
+scanner, and no exploit runner** — it sends **zero packets to any target**. What
+it produces is the artifact a whitebox tester needs: a prioritized set of
+findings grounded in `file:line` evidence, and a test plan **you** execute
+against a system you are authorised to test.
 
 ```
      source code                        PHRAK                        you
@@ -33,8 +32,6 @@ system you are authorised to test.
                             never talks to the running app
 ```
 
-**What that means in practice**
-
 | PHRAK does | PHRAK does not |
 |------------|----------------|
 | Read source, config, and dependency manifests | Send a single request to a live target |
@@ -46,15 +43,13 @@ system you are authorised to test.
 
 The one exception is opt-in and still never reaches your target: the
 [`verify` agent](#the-verify-agent-opt-in) can run a minimal proof-of-concept
-against **the code, inside a locked-down container with no network** — to check
-whether a finding is actually exploitable. It is off by default.
+against **the code, inside a locked-down container with no network**. It is off
+by default.
 
 Runs **fully offline on a local Ollama model** by default, or on **Claude via
-the Anthropic API** if you opt in at setup. **PHRAK does not use Nuclei** (or
-CodeQL/Joern — OpenGrep is the sole static analyzer).
-
-Everything a run produces stays on your machine, inside a per-workspace
-`.phrack/` directory (like `.claude`).
+the Anthropic API** if you opt in. **No Nuclei, no CodeQL/Joern** — OpenGrep is
+the sole static analyzer. Everything a run produces stays on your machine in a
+per-workspace `.phrack/` directory (like `.claude`).
 
 ## The workflow
 
@@ -68,25 +63,25 @@ phrak testcases -w ./ws                                  # 4. work the test plan
 phrak report -w ./ws                                     # 5. one deliverable
 ```
 
-Steps 3 and 4 are yours, and **nothing in them involves a model**: you confirm or
-dismiss findings, add ones you found yourself, and mark test cases off as you
+Steps 3 and 4 are yours, and **nothing in them involves a model**: you confirm
+or dismiss findings, add ones you found yourself, and mark test cases off as you
 execute them. Step 5 assembles everything into a single report.
 
 ## Agents
 
 | Agent | Role |
 |-------|------|
-| `code_review` | Finds vulnerabilities in source (OWASP/CWE) with `file:line` findings, exploitability reasoning, and fixes. Uses **OpenGrep in taint mode** (source→sink dataflow traces for SQLi, cmd-injection, path traversal, SSRF, deserialization) as its confirmed-lead source, **OpenGrep pattern scan** + **secret scanning** as unconfirmed leads, then verifies each in source, and records validated structured findings. Also has **semantic `rag_search`** for finding sibling instances of a bug pattern. |
-| `threat_model` | STRIDE/PASTA threat model: components, trust boundaries, data flows, per-threat table, and prioritized attack paths, tied to real components in the code. |
-| `test_case` | Reads the source (and the `code_review` findings + `threat_model` threats fed forward) and turns them into a **prioritized list of concrete security test cases** — each with a target, steps, and an expected result — for you to work through manually. Each is recorded in a trackable [backlog](#test-cases). **PHRAK does not run the tests**; it produces the checklist. |
-| `generate_report` | Assembles the whole engagement into one deliverable: executive summary, threat model, code review, findings, and every test case. Its body is **quoted verbatim** from the runs and stores that produced it — only the executive summary is model-written. See [The final report](#the-final-report-generate_report). |
-| `verify` *(opt-in)* | Takes each confirmed data-flow finding and runs a minimal PoC **inside a locked-down container** to demonstrate exploitability: `--network none`, read-only rootfs, non-root, dropped caps, memory/pids capped, wall-clock timeout. When a PoC lands, the finding's runtime status is promoted. Off by default (`enable_verify: false`) — running attacker payloads is a policy decision. |
+| `code_review` | Finds vulnerabilities in source (OWASP/CWE) with `file:line` findings, exploitability reasoning, and fixes. Uses **OpenGrep taint mode** (source→sink traces) as confirmed leads, **OpenGrep pattern + secret scans** as unconfirmed leads, verifies each in source, and records structured findings. Has semantic `rag_search` for sibling instances of a pattern. |
+| `threat_model` | STRIDE/PASTA threat model: components, trust boundaries, data flows, a per-threat table, and prioritized attack paths, tied to real components in the code. |
+| `test_case` | Turns the source (+ `code_review` findings and `threat_model` threats fed forward) into a **prioritized list of concrete security test cases** — each with a target, steps, and expected result. Recorded in a trackable [backlog](#test-cases). **PHRAK does not run the tests.** |
+| `generate_report` | Assembles the engagement into one deliverable. Its body is **quoted verbatim** from the runs and stores; only the executive summary is model-written. See [The final report](#the-final-report-generate_report). |
+| `verify` *(opt-in)* | Runs a minimal PoC for each confirmed data-flow finding **inside a locked-down container** to demonstrate exploitability, then promotes the finding's runtime status. Off by default (`enable_verify: false`). |
 
 The **orchestrator** plans a dependency graph of agent tasks, runs independent
-ones in parallel, feeds each task's findings forward, and synthesizes one
-consolidated report (confirmed vs. hypotheses, with coverage & limitations).
-`generate_report` is deliberately **not** schedulable by the planner — it is
-invoked by hand, once the work it reports on exists.
+ones in parallel, feeds each task's findings forward, and synthesizes one report
+(confirmed vs. hypotheses, with coverage & limitations). `generate_report` is
+deliberately **not** schedulable by the planner — it is invoked by hand, once
+the work it reports on exists.
 
 ## Install
 
@@ -99,22 +94,15 @@ ollama pull qwen2.5-coder:7b
 
 This installs two commands:
 
-- **`phrakagent [DIR]`** — launch a PHRAK chat session scoped to `DIR`
-  (defaults to the current directory). This is the quickest way in:
+- **`phrakagent [DIR]`** — launch a chat session scoped to `DIR` (defaults to
+  the current directory). `DIR` becomes the workspace: the root the file tools
+  read, and where `.phrack/` is anchored. Trailing arguments pass through to the
+  full CLI, e.g. `phrakagent /proj run "assess this app"`.
+- **`phrak`** — the full CLI (`run` / `agent` / `ask` / `findings` / `config` /
+  …), with `-w/--workspace` to point at a directory.
 
-  ```bash
-  phrakagent /path/to/project     # chat about that project's code
-  phrakagent                      # chat about the current directory
-  ```
-
-  `DIR` becomes the workspace: the root the file tools read, and where
-  `.phrack/` (config, code index, findings, reports) is anchored. Trailing
-  arguments pass through to the full CLI, e.g. `phrakagent /proj run "assess this app"`.
-
-- **`phrak`** — the full CLI (`run` / `agent` / `ask` / `findings` / `config` / …),
-  with `-w/--workspace` to point at a directory.
-
-(Or, without installing: `pip install -r requirements.txt` and use `python cli.py …`.)
+(Or, without installing: `pip install -r requirements.txt` and use
+`python cli.py …`.)
 
 Requires [Ollama](https://ollama.com) with a tool-capable model (default
 `qwen2.5-coder:7b`) — unless you choose the Anthropic provider, which needs only
@@ -127,37 +115,28 @@ static-analysis leads (PHRAK degrades gracefully without it).
 phrak config
 ```
 
-An interactive wizard (**no AI involved**) asking for your default workspace,
-model provider, model settings, and embeddings backend. It writes
-`<workspace>/.phrack/config.yaml`.
-Launching PHRAK with no config runs the wizard automatically; re-run mid-session
-with `/config`. Inspect the resolved config any time with `phrak config --show`
-(secret-looking values are redacted).
+An interactive wizard (**no AI involved**) for your default workspace, model
+provider, model settings, and embeddings backend. It writes
+`<workspace>/.phrack/config.yaml`. Launching PHRAK with no config runs the
+wizard automatically; re-run mid-session with `/config`. Inspect the resolved
+config with `phrak config --show` (secret-looking values are redacted).
 
 ### Model provider — Ollama or Claude
-
-The wizard's first choice is where the model runs:
 
 | Provider | What it means |
 |----------|---------------|
 | `ollama` *(default)* | Fully local. Nothing leaves the machine. Asks for model, base URL, and temperature. |
 | `anthropic` | Claude via the Anthropic API. Asks for the model (default `claude-opus-5`, or `claude-sonnet-5` / `claude-haiku-4-5`), a max-output-token cap, and your API key. **Prompts — including the code excerpts the agents read — are sent to Anthropic.** |
 
-**The API key is stored in `<workspace>/.phrack/credentials`**, mode `0600` —
-never in `config.yaml` (which `config --show` prints and the RAG indexer reads).
-At startup PHRAK exports it as the process-wide `ANTHROPIC_API_KEY` environment
-variable, which is where the SDK picks it up, so nothing else has to handle the
-key. A key stored for the workspace **takes precedence** over one already
-exported in your shell — it's this workspace's explicit configuration. If the
-provider is `anthropic` and no key is found anywhere, PHRAK says so at startup
-instead of failing on the first model call.
+**The API key is stored in `<workspace>/.phrack/credentials`** (mode `0600`),
+never in `config.yaml`. At startup PHRAK exports it as `ANTHROPIC_API_KEY`; a key
+stored for the workspace takes precedence over one already in your shell. If the
+provider is `anthropic` and no key is found, PHRAK says so at startup instead of
+failing on the first model call. Re-run `phrak config` to rotate it (Enter keeps
+the stored one), or edit/delete `.phrack/credentials` directly.
 
-Re-run `phrak config` to rotate the key (press Enter at the prompt to keep the
-stored one), or edit/delete `.phrack/credentials` directly. `.phrack/` is
-already gitignored.
-
-Per-agent overrides work across providers — e.g. a local model for
-`code_review` and Claude for `threat_model`:
+Per-agent overrides work across providers — e.g. a local model for `code_review`
+and Claude for `threat_model`:
 
 ```yaml
 agent_models:
@@ -191,9 +170,8 @@ All per-workspace state lives in a single `.phrack/` dir at the workspace root:
 
 `.phrack/` is git-ignored. Point at another project with `-w /path/to/project`
 and it uses that project's own `.phrack/`. Anything added with `--global`
-(skills) lives in your user-level `~/.phrack/` and applies to
-every workspace. (Legacy top-level `config.yaml` + `data/` layouts are still
-auto-detected.)
+(skills) lives in `~/.phrack/` and applies to every workspace. (Legacy top-level
+`config.yaml` + `data/` layouts are still auto-detected.)
 
 ### Config keys
 
@@ -246,16 +224,15 @@ phrak --json findings -w ./target      # the whole store as JSON, for CI
 ```
 
 Global flags work on every subcommand: `-w/--workspace`, `-c/--config`,
-`--quiet`, `--json`, `--no-color`, `--version`. (`phrak setup` is an
-alias for `config`, `phrak interactive` for `chat`, and `-1` is short for
-`run --single`.)
+`--quiet`, `--json`, `--no-color`, `--version`. (`phrak setup` aliases `config`,
+`phrak interactive` aliases `chat`, and `-1` is short for `run --single`.)
 
 ## Chat mode
 
 Running `phrak` with no subcommand drops you into a conversational REPL: plain
 text is a normal turn (PHRAK reads code and answers, keeping thread context), and
-everything else is a slash command. `Tab` autocompletes them, `↑/↓` filters your
-history by prefix, and unknown commands get a "did you mean" hint.
+everything else is a slash command. `Tab` autocompletes, `↑/↓` filters history by
+prefix, and unknown commands get a "did you mean" hint.
 
 Anywhere in a message, `@path/to/file` inlines that file from the workspace into
 the turn. Each reference is echoed back before the model runs (`attached
@@ -311,51 +288,28 @@ phrak --json findings                           # machine-readable, for a CI gat
 In chat, `/triage <id> <status> [note]` records a **human** verdict — one of
 `new`, `confirmed`, `unconfirmed`, `false_positive`, `accepted_risk`, `fixed`.
 Human triage is the authority of last resort: it can move a finding anywhere,
-it's kept on a separate track from the agent's own status (so you can always see
-both), and it is preserved when a later run re-observes the same finding.
+it's kept on a separate track from the agent's own status, and it is preserved
+when a later run re-observes the same finding.
 
 If a re-run turns up materially stronger evidence for something you'd dismissed
-— confidence jumped, severity changed, or a supporting taint path newly appeared
-— the record is flagged **⟲ re-surfaced** for another look. `--resurfaced`
-lists exactly those, and your next `/triage` clears the flag.
+(confidence jumped, severity changed, or a supporting taint path newly appeared),
+the record is flagged **⟲ re-surfaced**. `--resurfaced` lists exactly those, and
+your next `/triage` clears the flag. An `<id>` can be the full finding id, its
+fingerprint, or a unique prefix of either.
 
-An `<id>` can be the full finding id, its fingerprint, or a unique prefix of
-either.
-
-### Findings you found yourself
-
-Not every finding comes from an agent. `/finding-add` (or `phrak add-finding`)
-records one you verified by hand — **no model is involved at any point**, the
-fields are exactly what you typed, and the id is generated for you:
-
-```
-phrak➜ /finding-add
-
-  new verified finding (Ctrl-C to cancel; the id is generated)
-  Title: Auth bypass on /admin
-  Category (e.g. SQL injection, broken access control): broken access control
-  Severity [critical/high/medium/low/info]: critical
-  File (workspace-relative): app/views.py
-  Line: 88
-  ...
-[phrak] Recorded FND-9c41ba22e0 — critical, status confirmed (human).
-```
-
-Or non-interactively, for scripting:
+**Findings you found yourself.** `/finding-add` (or `phrak add-finding`) records
+one you verified by hand — **no model is involved** — landing on the **human**
+track as `confirmed`:
 
 ```bash
 phrak add-finding --title "Auth bypass on /admin" --category "broken access control" \
   --severity critical --file app/views.py --line 88 --cwe CWE-862
 ```
 
-It lands on the **human** track as `confirmed`, which means it outranks anything
-an agent later says about the same code and survives every re-run. The id is
-derived from the finding's own content (category + location + title), so if an
-agent independently reports the same issue the two converge onto **one** record
-rather than duplicating — and your verdict is the one that sticks.
-
-If the path doesn't resolve in the workspace you get a warning, not a
-downgrade: you verified it, so PHRAK doesn't second-guess the verdict.
+The id is derived from the finding's own content (category + location + title),
+so if an agent later reports the same issue the two converge onto **one** record
+rather than duplicating — and your verdict is the one that sticks. If the path
+doesn't resolve in the workspace you get a warning, not a downgrade.
 
 ## Test cases
 
@@ -382,20 +336,16 @@ phrak --json testcases                 # for a tracker import
 Working the list, in chat:
 
 ```
-/testcase-status TC-4751bf44 in_progress
 /testcase-status TC-4751bf44 complete fail     # 'fail' = the app was vulnerable
 /testcase-note   TC-4751bf44 reproduced with a single quote in uid
 /testcase-link   TC-9f8e7d6c FND-9c41ba22e0    # tie it to the finding it verifies
 ```
 
-Statuses are `new`, `in_progress`, `complete` (`done`, `wip`, `in-progress` and
-friends are accepted). Results are `pass`, `fail`, `blocked`, `inconclusive` —
-**`fail` means the test found the app vulnerable**, which is the outcome you
-usually want recorded. `/testcase-link` refuses an id that doesn't exist, so a
-typo surfaces immediately instead of at report time.
-
-**Add your own** with `/testcase-add` (or `phrak add-testcase`) — again, no
-model involved:
+Statuses are `new`, `in_progress`, `complete`. Results are `pass`, `fail`,
+`blocked`, `inconclusive` — **`fail` means the test found the app vulnerable**.
+`/testcase-link` refuses an id that doesn't exist, so a typo surfaces immediately.
+**Add your own** with `/testcase-add` (or `phrak add-testcase`), no model
+involved:
 
 ```bash
 phrak add-testcase --title "Rate limit on /login" --target "POST /login" \
@@ -403,18 +353,13 @@ phrak add-testcase --title "Rate limit on /login" --target "POST /login" \
   --expected "requests are rejected after N" --severity medium
 ```
 
-**Re-running `test_case` never costs you progress.** A re-authored test keeps
-its status, result, notes and finding link — only the instructions (steps,
-target, severity) are refreshed. The identity is derived from title + target, so
-the same test written twice collapses into one backlog entry.
-
-**Every finding gets a test case.** After a full `phrak run`, the orchestrator
-reconciles the backlog against the findings store (`appsec/coverage.py`): it links
-an authored test case to the finding it plainly verifies, and backfills a minimal
-verification test case (`source_agent: coverage`, linked via `finding_id`) for any
-finding — confirmed or unconfirmed — that nothing else covers. So `/testcases
---unlinked` shrinks to genuine gaps, and no finding is left with nothing to check
-it. The step is idempotent: a covered finding is never given a duplicate.
+**Re-running `test_case` never costs you progress** — a re-authored test keeps
+its status, result, notes and link; only the instructions are refreshed
+(identity is derived from title + target). **Every finding gets a test case:**
+after a full `phrak run`, the orchestrator reconciles the backlog against the
+findings store (`appsec/coverage.py`), links authored tests to the findings they
+verify, and backfills a minimal verification test case for any finding —
+confirmed or unconfirmed — that nothing else covers. The step is idempotent.
 
 ## The final report (`generate_report`)
 
@@ -436,28 +381,19 @@ phrak report --out ./assessment.md        # write it to a file
 
 **Only the executive summary is generated.** Everything else is quoted or
 rendered from artifacts that already exist, because a model asked to "summarize
-the code review" will paraphrase — and a paraphrased finding drifts away from
-the `file:line` evidence the report claims to rest on. The summary itself is
-prompted with a digest of that same material and told not to invent anything.
-
-A full `phrak run` **leaves the material this report needs**: each specialist's
-own `threat_model` / `code_review` output is saved as its own
-`report-<ts>-<agent>.md` (not just folded into the consolidated report), so a
-later `phrak report` quotes them instead of showing placeholders.
-
-The report is honest about gaps. If `threat_model` has genuinely never been run,
-the section says so and names the command to fix it, rather than quietly omitting
-a heading; and if the model is unreachable, the summary is replaced by a factual
-stub while every assembled section survives intact.
-
-`generate_report` is excluded from the orchestrator's planner, so `phrak run`
-can never schedule it mid-assessment where it would report on findings that
-hadn't been made yet.
+the code review" paraphrases — and a paraphrased finding drifts from the
+`file:line` evidence the report rests on. A full `phrak run` leaves the material
+this report needs: each specialist's own output is saved as its own
+`report-<ts>-<agent>.md`. The report is honest about gaps — if `threat_model`
+has never been run the section says so and names the command to fix it; if the
+model is unreachable the summary is replaced by a factual stub while every
+assembled section survives intact. `generate_report` is excluded from the
+planner, so `phrak run` can never schedule it before the findings exist.
 
 ## Bring in a codebase (`phrak clone`)
 
-Analyze a remote repo without cloning it by hand — `phrak clone` (no AI) shallow-
-clones it into a sandboxed area under the workspace and can index it in one step:
+`phrak clone` (no AI) shallow-clones a remote repo into a sandboxed area under
+the workspace and can index it in one step:
 
 ```bash
 phrak clone https://github.com/org/webapp -w ./ws      # -> ./ws/clones/webapp
@@ -466,11 +402,9 @@ phrak clone git@github.com:org/webapp.git --index      # clone + build the RAG i
 
 It clones `--depth 1 --single-branch` with **git hooks disabled** and submodules
 skipped by default (`--recurse` to include them); **HTTPS/SSH URLs only** —
-`file://`, local paths, and URLs carrying inline credentials are refused (so no
-secret is ever written to a logged URL; use git's own SSH keys / credential
-helper). The clone is size-capped and confined to `<workspace>/clones`. Cloned
-code is treated like any other workspace target — the same read-only sandbox
-applies.
+`file://`, local paths, and URLs carrying inline credentials are refused. The
+clone is size-capped and confined to `<workspace>/clones`. Cloned code gets the
+same read-only sandbox as any other workspace target.
 
 ## How orchestration works
 
@@ -489,129 +423,80 @@ flowchart TD
     ONE --> AX["Single agent run"]
     AX --> SYN
     SYN --> R["Report saved to .phrack/reports/"]
-
-    subgraph AGENT["Each agent run (tool-calling loop)"]
-      direction TB
-      SP["System prompt + curated skills\n+ relevant saved skills\n+ workspace file overview"]
-      SP --> LOOP["LLM ⇄ tools\n(read_file / search_code / opengrep /\ndependency_audit / report_finding /\nreport_test_case …)"]
-      LOOP --> DONE{"report complete?"}
-      DONE -->|"missing sections"| LOOP
-      DONE -->|"yes"| PERSIST["Persist validated findings + test cases →\ncross-run stores you then triage"]
-    end
 ```
 
-**Step by step:**
 1. **Plan or route.** In `dag` mode (default) `phrak run` asks the LLM for a task
    graph — each task assigned to an agent, with `depends_on` and a
    `parallel_group` — and falls back to a linear DAG if planning fails.
-   `orchestrator.mode: linear` keeps the classic ordered pipeline.
-   `phrak run --single` routes to the single best-fit agent (LLM, then keyword
-   heuristic) and skips synthesis.
-2. **Execute the DAG.** The orchestrator runs each ready wave concurrently
-   (bounded by `orchestrator.max_concurrency`, default 3). A failed task is
-   **isolated**: its dependents are skipped, independent tasks keep running.
-   Run-scoped state (findings, tool ledger) is context-isolated so parallel
-   agents never clobber each other.
+   `orchestrator.mode: linear` keeps the classic ordered pipeline. `run --single`
+   routes to the single best-fit agent and skips synthesis.
+2. **Execute the DAG.** Each ready wave runs concurrently (bounded by
+   `max_concurrency`, default 3). A failed task is **isolated**: its dependents
+   are skipped, independent tasks keep running. Run-scoped state is
+   context-isolated so parallel agents never clobber each other.
 3. **Each agent** runs a tool-calling loop (bounded by `max_steps`) with its
-   curated skills applied (front-loaded for `code_review`, or exposed as an
-   on-demand index for the skill-heavy `threat_model` / `test_case`), the most
-   relevant saved skills
-   injected, and a real file overview of the workspace. If the report is missing
-   required sections it's nudged to continue (up to `max_rounds`); if it stalls
-   asking you to paste code, PHRAK reads the files itself. Progress is streamed to
-   the terminal (see [Live activity output](#live-activity-output)).
+   curated skills, the most relevant saved skills injected, and a real file
+   overview of the workspace. Missing report sections get a nudge to continue (up
+   to `max_rounds`); if it stalls asking you to paste code, PHRAK reads the files
+   itself. Progress is streamed (see [Live activity output](#live-activity-output)).
 4. **Findings feed forward** to dependent tasks (e.g. `code_review` +
    `threat_model` → `test_case`) and are **persisted** to the cross-run history
-   store. If the agents recorded nothing structured this run (a weak model that
-   only wrote prose), the orchestrator salvages findings and test cases out of the
-   consolidated report itself — see
-   [Findings and test cases are captured even when the model won't](#findings-and-test-cases-are-captured-even-when-the-model-wont).
-5. **Synthesis.** The orchestrator merges outputs into one report that
-   **separates confirmed findings from hypotheses, preserves disagreement**
-   between agents, and adds a coverage & limitations section (including any failed
-   or skipped task), saved to `.phrack/reports/`.
-6. **Coverage reconciliation.** Because findings can be salvaged only at synthesis
-   — after `test_case` has already run — the orchestrator finally ties the two
-   together (`appsec/coverage.py`): each test case is linked to the finding it
-   clearly verifies (unambiguous title-token overlap only, never a guess), and
-   **every finding still without a linked test case — including unconfirmed ones —
-   gets a minimal, finding-linked verification test case**. It's idempotent, so a
-   finding already covered is never re-linked or duplicated.
+   store. If the agents recorded nothing structured (a weak model that only wrote
+   prose), the orchestrator salvages findings and test cases out of the report
+   itself — see [Robustness on weak local models](#robustness-on-weak-local-models).
+5. **Synthesis.** Outputs merge into one report that **separates confirmed
+   findings from hypotheses, preserves disagreement** between agents, and adds a
+   coverage & limitations section (including any failed or skipped task), saved to
+   `.phrack/reports/`.
+6. **Coverage reconciliation.** The orchestrator ties test cases to findings
+   (`appsec/coverage.py`): each test case is linked to the finding it clearly
+   verifies (unambiguous title-token overlap only), and every finding still
+   without a linked test — including unconfirmed ones — gets a minimal
+   verification test case. Idempotent, so a covered finding is never duplicated.
 
-### Surviving weaker local models
+### Robustness on weak local models
 
-Small local models often *print* a tool call as JSON (or inside `<tool_call>`
-tags) instead of emitting a structured one, which would otherwise make the agent
-loop silently do nothing. `appsec/middleware.py` intercepts that: when a reply
-carries no real tool calls but its content contains a well-formed call naming a
-bound tool, it's converted into a genuine tool call and executed. This is why
-PHRAK works on models like `qwen2.5-coder:7b` without per-agent workarounds. It
-is enabled only for non-Anthropic providers — Claude emits real tool calls.
+Small local models often *print* a tool call (as JSON, or inside `<tool_call>`
+tags) instead of emitting a structured one, and unreliably call the capture tools
+even when they write a full report. PHRAK closes both gaps so it works on models
+like `qwen2.5-coder:7b` without per-agent workarounds — all non-Anthropic-only
+(Claude emits real tool calls):
 
-**This is also a prompt-injection surface**, and it's treated as one. A security
-agent reads hostile input by definition: the file under review, a quoted user
-message, an "example payload" the model is warning you about. Any of those can
-be echoed back into the reply as JSON that *looks* like a call. So the extractor
-narrows what counts as genuine intent to call a tool:
-
-1. **Fenced blocks or `<tool_call>` tags only.** Raw JSON in prose is ignored —
-   the earlier bare-content fallback was removed.
-2. **Example-framing is skipped.** If the prose around the fence (± ~120 chars)
-   frames it as illustrative — "for example", "e.g.", "such as", "do not run" —
-   no call is made.
-3. **Inline `` `code spans` `` and blockquoted (`> …`) lines never trigger a
-   call** — the two ways quoted-from-elsewhere content usually arrives.
-
-It stays a *compensating control for weak models*, not a security boundary: the
-real boundaries are the read-only tool set and the workspace sandbox.
-`tests/test_middleware_injection.py` pins each rule.
-
-### Findings and test cases are captured even when the model won't
-
-A small model reliably *writes* a structured report but unreliably *calls* the
-`report_finding` / `report_test_case` capture tools — so the prose report is full
-of issues while `/findings` and `/testcases` stay empty. PHRAK defends that gap in
-three escalating layers, so the backlog is populated regardless of how
-cooperative the model is:
-
-1. **Record-as-you-go.** The agents are prompted to capture each item the moment
-   they confirm it, one at a time, rather than batching to the end of a run.
-2. **A guaranteed recording pass.** If an agent finishes with a full report but an
-   empty store, it gets one focused turn that feeds the report back and asks it to
-   call the capture tool for each item — transcribing a report it already wrote is
-   a far easier task than the original review.
-3. **Deterministic extraction (`appsec/extract.py`).** If the store is *still*
-   empty, PHRAK parses the report text itself — no model, no tools — into the same
-   validated `SecurityFinding` / `SecurityTestCase` objects, grounding each
-   against the workspace (an item whose `file:line` can't be located is recorded
-   `unconfirmed`, exactly as the capture tool would). At the pipeline level the
-   orchestrator does the same salvage on the *consolidated* report, but only for a
-   track the agents left empty this run — so precise agent-recorded items are never
-   shadowed by vaguer salvaged ones.
-
-The extractor is conservative: a block is only recorded when it carries the
-attributes that define a real finding/test case, so remediation-roadmap items and
-bare headings are skipped rather than stored as empty records.
-`tests/test_extract.py` pins it against the exact report shapes
-`qwen2.5-coder:7b` produces.
+- **Verbalized tool calls (`appsec/middleware.py`).** When a reply has no real
+  tool calls but its content contains a well-formed call naming a bound tool, it's
+  converted into a genuine call and executed. **This is also a prompt-injection
+  surface** — a security agent reads hostile input by definition — so the
+  extractor narrows what counts as intent: only fenced blocks / `<tool_call>` tags
+  (raw JSON in prose is ignored), example-framing ("for example", "do not run") is
+  skipped, and inline `` `code spans` `` / blockquoted lines never trigger a call.
+  It stays a *compensating control for weak models*, not a security boundary — the
+  real boundaries are the read-only tool set and the workspace sandbox.
+  `tests/test_middleware_injection.py` pins each rule.
+- **Guaranteed capture, three escalating layers.** Agents are prompted to record
+  each item the moment they confirm it. If an agent finishes with a full report
+  but an empty store, it gets one focused turn to transcribe the report into
+  capture-tool calls. If the store is *still* empty, deterministic extraction
+  (`appsec/extract.py`) parses the report text itself — no model, no tools — into
+  the same validated objects, grounding each against the workspace (an item whose
+  `file:line` can't be located is recorded `unconfirmed`). The orchestrator does
+  the same salvage on the *consolidated* report, but only for a track the agents
+  left empty this run. The extractor is conservative: only blocks carrying the
+  attributes of a real finding/test case are recorded. `tests/test_extract.py`
+  pins it against the shapes `qwen2.5-coder:7b` produces.
 
 ## Static analyzer: OpenGrep
 
 `code_review` runs **OpenGrep** as its deterministic lead source, then verifies
 every hit by reading the code:
 
-- **`opengrep_taint_scan`** — OpenGrep in **taint mode** with PHRAK's own bundled
-  ruleset (`appsec/analyzers/rules/taint/`), tracing source→sink dataflow rather
-  than matching a pattern in isolation. These are the **confirmed leads**: a hit
-  carries an actual path from untrusted input to a dangerous sink.
+- **`opengrep_taint_scan`** — OpenGrep in **taint mode** with PHRAK's bundled
+  ruleset (`appsec/analyzers/rules/taint/`), tracing source→sink dataflow. These
+  are the **confirmed leads**: a hit carries an actual path from untrusted input
+  to a dangerous sink.
 - **`opengrep_scan`** — fast pattern-based rules across many languages
-  (`--config auto` by default). Returns `file:line [severity] rule -> message`.
-  Pattern hits are **unconfirmed leads** to verify in source.
+  (`--config auto`). Returns `file:line [severity] rule -> message`. **Unconfirmed
+  leads** to verify in source.
 - **`scan_secrets`** — OpenGrep's secrets ruleset, for hardcoded credentials/keys.
-
-[OpenGrep](https://opengrep.dev) is an open-source (LGPL) static-analysis engine
-driven by a familiar `scan` subcommand with JSON output — and with no telemetry,
-no login, and no account required.
 
 **Bundled taint-rule coverage is deliberately narrow** — hand-written rules that
 hold up, not breadth:
@@ -621,19 +506,15 @@ hold up, not breadth:
 | Python | SQL injection, command injection, path traversal, SSRF, unsafe deserialization |
 | JavaScript / TypeScript | SQL injection, command injection, SSRF |
 
-Anything outside that table gets no taint trace — `opengrep_scan`'s pattern
-rules and the agent's own source reading are the fallback, and both produce
-`unconfirmed` findings. Since a data-flow finding **cannot be marked `confirmed`
-without a supporting taint path**, a SQLi in Ruby or Java will surface as a lead
-and stay one. Point `--config` at your own rules to extend this.
+Anything outside that table gets no taint trace — pattern rules and the agent's
+own source reading are the fallback, both producing `unconfirmed` findings. Since
+a data-flow finding **cannot be marked `confirmed` without a supporting taint
+path**, a SQLi in Ruby or Java surfaces as a lead and stays one. Point `--config`
+at your own rules to extend this.
 
-OpenGrep is PHRAK's **sole** static analyzer — the earlier CodeQL/Joern setup
-(and the bespoke Python taint engine before it) has been removed. The tool
-is **optional and degrades gracefully**: if the binary isn't on PATH it returns an
-install hint instead of failing the run. Findings are **leads**, not confirmed
-vulnerabilities — the agent confirms each by reading the surrounding code.
-
-### Installing OpenGrep
+OpenGrep is PHRAK's **sole** static analyzer (the earlier CodeQL/Joern setup has
+been removed). It's **optional and degrades gracefully**: if the binary isn't on
+PATH it returns an install hint instead of failing the run.
 
 ```bash
 # Linux/macOS — official installer puts `opengrep` on PATH:
@@ -643,27 +524,19 @@ opengrep --version
 
 PHRAK resolves the binary from `$PHRAK_OPENGREP_BIN` if set, otherwise `opengrep`
 on PATH. Rules come from `--config`: `auto` (default), a registry id
-(e.g. `p/owasp-top-ten`), or a **path to a local rules file/directory** — point at
-a local ruleset for fully-offline scans.
+(e.g. `p/owasp-top-ten`), or a **path to a local rules file/directory** for
+fully-offline scans.
 
-### Normalized findings, dependency audit & false-sanitizer checks
-
-Analyzer output isn't left as opaque text. Each analyzer is an **`AnalyzerAdapter`**
-(`appsec/analyzers/`) that normalizes its results into the same structured
-`SecurityFinding` objects an agent reports by hand, so they run through one
-`validate → ground → dedupe` pipeline and render together:
-
-- **`analyzer_scan`** — runs OpenGrep and records each hit as a workspace-grounded,
-  `unconfirmed` finding (a lead to verify), deduped with anything you later confirm.
-- **`dependency_audit`** — audits dependency manifests for **known-vulnerable
-  versions** via `pip-audit` / `npm audit` / `govulncheck` / `cargo audit` (per
-  ecosystem, each optional), each normalized into a `vulnerable-dependency` finding
-  with advisory id, severity, CWE, and fix version. (This is deeper than
-  `analyze_dependencies`, which only dumps manifests.)
-- **`check_sanitizer`** — a context-sensitive effectiveness table so the reviewer
-  doesn't dismiss a bug on a **false-sanitizer assumption**: HTML-escape ≠ SQL-safe,
-  `urlparse` ≠ SSRF-safe, `shlex.quote` is fragile with `shell=True`, a prefix check
-  *before* canonicalization is bypassable, and authentication ≠ authorization.
+**Normalized output.** Each analyzer is an **`AnalyzerAdapter`**
+(`appsec/analyzers/`) that normalizes results into the same structured
+`SecurityFinding` an agent reports by hand, run through one
+`validate → ground → dedupe` pipeline: `analyzer_scan` (OpenGrep hits as
+workspace-grounded `unconfirmed` leads), `dependency_audit` (known-vulnerable
+versions via `pip-audit` / `npm audit` / `govulncheck` / `cargo audit`, each
+optional, normalized into a `vulnerable-dependency` finding with advisory id and
+fix version), and `check_sanitizer` (a context-sensitive effectiveness table so
+the reviewer doesn't dismiss a bug on a false-sanitizer assumption — HTML-escape
+≠ SQL-safe, `urlparse` ≠ SSRF-safe, and so on).
 
 ## The `verify` agent (opt-in)
 
@@ -675,29 +548,25 @@ enable_verify: true          # .phrack/config.yaml
 ```
 
 It only appears in the agent registry when that flag is set — otherwise the DAG
-planner can't schedule it, so a plain "assess this app" run can never pull it in
-by accident. It needs `docker` or `podman` on PATH; without one, `run_poc`
-returns an install hint instead of falling back to the host.
+planner can't schedule it. It needs `docker` or `podman` on PATH; without one,
+`run_poc` returns an install hint instead of falling back to the host.
 
 **What it does.** It runs after `code_review`/`threat_model` and takes their
-**confirmed data-flow findings** — SQLi, command injection, path traversal,
-unsafe deserialization, SSRF against a controlled target — writes a short PoC
-for each, and runs it in a container with `run_poc`. It may only confirm findings
-already in the run's ledger; discovery is not its job. It then records the
-verdict on the finding with **`record_poc_result(finding_id, outcome, …)`**,
-which writes to the finding's **runtime** status track in the durable store:
+**confirmed data-flow findings** (SQLi, command injection, path traversal, unsafe
+deserialization, SSRF against a controlled target), writes a short PoC for each,
+and runs it in a container with `run_poc`. It may only confirm findings already
+in the run's ledger; discovery is not its job. It records the verdict with
+**`record_poc_result(finding_id, outcome, …)`**, which writes to the finding's
+**runtime** status track:
 
 | `outcome` | Effect on the finding |
 |-----------|-----------------------|
-| `confirmed` | Runtime track → `confirmed` (and confidence raised) — a landed PoC is the strongest evidence there is |
+| `confirmed` | Runtime track → `confirmed` (confidence raised) — a landed PoC is the strongest evidence there is |
 | `false_positive` | Runtime track → `false_positive`; never re-marked confirmed |
 | `inconclusive` | Status unchanged, a note is attached (needs a full app stack / out of scope) |
 
 The runtime track folds into the finding's `effective_status` **above** the
-reporting agent's status but **below** a human triage decision (human > runtime >
-agent), so a landed PoC promotes a finding to runtime-confirmed while your own
-verdict still wins. Bugs needing a full app stack are reported as *out of scope*
-rather than guessed at.
+agent's status but **below** a human triage decision (human > runtime > agent).
 
 **The sandbox.** Every PoC runs via `docker run --rm` (or podman) with:
 
@@ -713,84 +582,21 @@ rather than guessed at.
 
 **This is a real trade-off, not a solved problem.** You are running
 model-authored attacker code. The sandbox is a strong boundary, not a proof —
-container escapes exist. Leave `verify` off unless you want that trade, and
-run it against code you're authorised to test.
-
-## Authoring the test plan (`test_case`)
-
-`test_case` runs last in a full assessment. It reads the source together with the
-findings fed forward from `code_review` and the threats from `threat_model`, and
-turns them into a **prioritized list of concrete security test cases** for you to
-work through by hand. Each is written in a standard, reviewable shape — a title,
-the finding/threat it verifies, the exact target (endpoint / parameter /
-`file:line`), preconditions, numbered steps with a real payload, and the
-**expected result** that proves the issue present-or-absent — and the set is
-ordered by risk with a traceability table back to each finding/threat.
-
-Every test case is also recorded via `report_test_case` into the trackable
-[backlog](#test-cases), with a generated `TC-…` id, so the plan is something you
-work through and check off rather than a wall of prose in a report.
-
-Its curated skills cover deriving test cases from findings and threats, the
-standard test-case shape, abuse-case enumeration beyond the confirmed findings,
-and risk-based prioritization.
-
-**A checklist, not an executor — PHRAK never runs the tests.** The agent is
-read-only (no HTTP or script-execution tool) and sends **no traffic to any
-target**. It hands you the plan to run yourself in your own authorised
-environment. A test case is a hypothesis until *you* execute it; the backlog's
-`result` field is where that outcome gets recorded.
+container escapes exist. Leave `verify` off unless you want that trade, and run
+it against code you're authorised to test.
 
 ## Structured findings model
 
 `appsec/models/findings.py` provides a typed `SecurityFinding` (with
-`FindingEvidence` and `TaintPathReference`/`TaintNode`/`TaintStep`) used to
-represent findings with evidence, CWE/OWASP tags, confidence, status, and
-validated taint paths. It supports:
-- **Stable fingerprints** so the same vuln is recognized across runs (history /
-  dedup).
-- **Validation** — confidence bounds, enums, workspace-grounded evidence (paths
-  inside the workspace, valid line numbers, snippet ≈ source), and the rule that
-  a data-flow finding cannot be `confirmed` without a supporting taint path.
-- **Separate status tracks** — `agent` / `runtime` / `human`, folded into one
-  `effective_status` with **human precedence** (human > runtime > agent), so who
-  decided what stays auditable.
-- **Serialization** + **Markdown rendering** + **deduplication**.
-
-`report_finding` REJECTS structurally-invalid input and **downgrades** ungrounded
-evidence to `unconfirmed` (it never silently upgrades a model claim).
-
-## Findings history & scope
-
-Findings and taint paths don't vanish when a run ends — they're persisted per
-workspace so PHRAK can answer "is this new or known?" and keep triage decisions:
-
-- **Persistent history** — every run upserts into `.phrack/findings/` and
-  `.phrack/taint/` (JSONL), keyed by fingerprint, tracking first/last seen, a
-  per-run log, status changes, and reviewer notes. A human verdict survives
-  re-runs; a materially-changed re-observation is flagged `⟲ re-surfaced`.
-- **Concurrency-safe** — the DAG runs agents in parallel and each persists at
-  the end of its run, so every read-modify-write on the store is serialized (a
-  thread lock plus an advisory file lock, the latter covering two `phrak`
-  processes on one workspace) and every write lands via an atomic rename. No
-  agent's findings can be dropped by another finishing at the same moment, and a
-  crash mid-write can't truncate the store.
-- **Triage tracks** — `runtime` and `human` verdicts are recorded separately from
-  the reporting agent's claim, so a status change stays attributable to whoever
-  made it. Browse and triage the store with `phrak findings` / `/findings`
-  (see [Triage findings](#triage-findings)), or read
-  `.phrack/findings/findings.jsonl` directly.
-
-- **Scope policy** — an optional `<workspace>/.phrack/scope.yaml` makes "what am I
-  allowed to touch" declarative: `allowed_hosts` / `allowed_ports` / path prefixes
-  and a `rate_limit_per_min`. It can only **narrow** what's already permitted — the
-  loopback-only floor is always enforced first and never weakened. See
-  [`scope.example.yaml`](scope.example.yaml).
-
-- **Public log** — `.phrack/` never leaves your machine, so real findings worth
-  publishing get curated by hand into [`FINDINGS.md`](FINDINGS.md): what PHRAK
-  found, in what, and what happened after disclosure (plus a *Not findings*
-  table for leads that triage killed).
+`FindingEvidence` and `TaintPathReference`/`TaintNode`/`TaintStep`) representing
+findings with evidence, CWE/OWASP tags, confidence, status, and validated taint
+paths. It supports **stable fingerprints** (same vuln recognized across runs),
+**validation** (confidence bounds, enums, workspace-grounded evidence, and the
+rule that a data-flow finding can't be `confirmed` without a supporting taint
+path), **separate status tracks** (`agent` / `runtime` / `human`, folded into one
+`effective_status` with human precedence), and **serialization + Markdown render
++ dedup**. `report_finding` REJECTS structurally-invalid input and **downgrades**
+ungrounded evidence to `unconfirmed` — it never silently upgrades a model claim.
 
 ### Sample structured finding (Markdown render)
 
@@ -821,60 +627,49 @@ Evidence:
 - app/db.py:84-96 — string-formatted SQL passed to execute()
 ```
 
-## Usability & customization
+## Findings history & scope
 
-Quality-of-life features for daily use (none affect the security posture):
+Findings and taint paths persist per workspace so PHRAK can answer "is this new
+or known?" and keep triage decisions:
 
-- **Scripting:** `--quiet` / `--json` output (`run`, `findings`) for scripting.
-- **Config & color:** `--no-color`; `phrak config --show` (redacted).
-- **Discoverability:** grouped `/help`, `/agents --verbose` (agents + their
-  tools), `--version`, `Tab` completion, typo "did you mean" hints.
-- **Context:** `@path/to/file` attaches a workspace file to any chat message,
-  echoing each reference (and why one was refused) before the model runs.
-- **Triage:** `/findings`, `/finding`, `/triage`, `/note` work the cross-run
-  finding store without leaving chat.
-- **Session control:** `/clear` (fresh thread), `/model` (switch mid-session),
-  `/cost` (tokens + estimated spend), `/verbose` (full tool output).
-- **Run control:** clean Ctrl-C cancel; readline `↑/↓` filters your prompt
-  history, persisted per workspace in `.phrack/history`.
+- **Persistent history** — every run upserts into `.phrack/findings/` and
+  `.phrack/taint/` (JSONL), keyed by fingerprint, tracking first/last seen, a
+  per-run log, status changes, and reviewer notes. A human verdict survives
+  re-runs; a materially-changed re-observation is flagged `⟲ re-surfaced`.
+- **Concurrency-safe** — the DAG runs agents in parallel and each persists at the
+  end of its run, so every read-modify-write is serialized (a thread lock plus an
+  advisory file lock covering two `phrak` processes on one workspace) and every
+  write lands via atomic rename. No agent's findings can be dropped by another,
+  and a crash mid-write can't truncate the store.
+- **Triage tracks** — `runtime` and `human` verdicts are recorded separately from
+  the reporting agent's claim. Browse and triage with `phrak findings` /
+  `/findings` (see [Triage findings](#triage-findings)), or read
+  `.phrack/findings/findings.jsonl` directly.
+- **Scope policy** — an optional `<workspace>/.phrack/scope.yaml` makes "what am I
+  allowed to touch" declarative (`allowed_hosts` / `allowed_ports` / path prefixes
+  / `rate_limit_per_min`). It can only **narrow** what's already permitted — the
+  loopback-only floor is always enforced first. See
+  [`scope.example.yaml`](scope.example.yaml).
+- **Public log** — `.phrack/` never leaves your machine, so real findings worth
+  publishing get curated by hand into [`FINDINGS.md`](FINDINGS.md).
 
-## Codebase Q&A (`/ask`)
+## Codebase Q&A (`/ask`) and indexing
 
 `phrak ask "<question>"` retrieves relevant chunks from a local Chroma index over
 the workspace and answers with `path:start-end` citations. The index covers
-source + docs and **also indexes the workspace's own `.phrack/` reports and
-saved skills** (so you can ask "what did the last threat model flag?"); only
-the vector store itself (`.phrack/rag/`) is skipped. Tune under `rag:` in config.
+source + docs and **also indexes the workspace's own `.phrack/` reports and saved
+skills** (so you can ask "what did the last threat model flag?"); only the vector
+store itself (`.phrack/rag/`) is skipped. Retrieval is dense vector search over a
+local embeddings backend (`default` ONNX or `ollama`); tune chunk size, `recall_k`,
+extensions, and excluded dirs under `rag:` in config.
 
-Every finished run writes its report to `.phrack/reports/` and folds it straight
-into `.phrack/rag/` — a single-agent run (`phrak agent <name> …`, `/<name>` in
-chat) saves `report-<ts>-<agent>.md`, and a pipeline run saves its consolidated
-`report-<ts>.md`. Because the agent appends its **structured findings** (id,
-severity, CWE, evidence `file:line`, disproof condition) to its own output, you
-can ask about a vulnerability the moment the run ends rather than waiting for
-`/ask` to sync. Both kinds share the `report-*.md` namespace, so
-`keep_reports` prunes them together.
+**The index is refreshed before every question**, so a citation reflects the code
+as it is now. The sync is **incremental** — files are keyed by mtime, so only what
+changed re-embeds. If the embeddings backend is unreachable, the answer is still
+produced from whatever is indexed, prefixed with an explicit staleness warning.
 
-Chunking is line-window based (`rag.chunk_lines` / `rag.chunk_overlap`) and
-retrieval is dense vector search over the local embeddings backend (`default`
-local ONNX or `ollama`). Tune the chunk size, `recall_k`, included extensions,
-and excluded dirs under `rag:` in config.
-
-**Keeping the index current.** The index is refreshed before every question, so
-a citation reflects the code as it is now, not as it was when first indexed. The
-sync is **incremental**: files are keyed by mtime, so only what changed
-re-embeds. Added files appear, edited files are re-chunked, deleted files drop
-out, and an untouched workspace costs a stat walk.
-
-If the embeddings backend is unreachable, the answer is still produced from
-whatever is indexed — prefixed with an explicit staleness warning, never
-silently.
-
-### `phrak index` — do the embedding on your own schedule
-
-Embedding is **local and CPU-bound**: a few hundred files takes minutes. That
-cost has to be paid once, and `phrak index` is how you pay it deliberately
-rather than discovering it mid-assessment.
+Embedding is **local and CPU-bound** (a few hundred files takes minutes), so
+`phrak index` lets you pay that cost deliberately rather than mid-assessment:
 
 ```bash
 phrak index                  # build or refresh — no AI, no model, no network
@@ -883,107 +678,73 @@ phrak index --rebuild        # wipe and re-embed everything (slow)
 phrak --json index           # machine-readable, for CI
 ```
 
-```
-[phrak] index :: 4359 chunk(s) from 742 file(s) :: .phrack/rag
-[phrak] workspace :: 742 indexable file(s)
-[phrak] up to date — nothing to do
-```
-
-Run it after `phrak clone`, or after a big refactor, and every later `/ask` and
-`rag_search` is instant. `/index` does the same thing inside a chat session.
-
-**Timing matters more than it looks.** The agents' `rag_search` tool refreshes
-the index at most **once per process**, serialized across the DAG's parallel
-agents — they cannot each embed the workspace, and an agent that arrives while
-one is indexing waits rather than duplicating the work. But that one refresh
-still happens inside a tool call. On a large, never-indexed workspace that is a
-multi-minute pause mid-run (with progress output, but still a pause). Indexing
-up front avoids it.
-
-Reach for `--rebuild` only when the index itself is suspect — a changed chunk
-size or embeddings model, or a corrupted store. Ordinary edits are handled
-incrementally.
+Run it after `phrak clone` or a big refactor, and every later `/ask` and
+`rag_search` is instant. The agents' `rag_search` refreshes the index at most
+**once per process**, serialized across the DAG's parallel agents — but that one
+refresh still happens inside a tool call, so on a large never-indexed workspace
+it's a multi-minute pause mid-run. Indexing up front avoids it. Reach for
+`--rebuild` only when the index itself is suspect (changed chunk size / embeddings
+model, or a corrupted store); ordinary edits are handled incrementally.
 
 ## Live activity output
 
 During any agent run PHRAK prints tool calls (`⚙ tool(args)` / `↳ tool: result`)
-and each external syscall a tool makes (`⟫ exec: <command>` then `✓/✗ …`) tagged
-with the running agent — so you can see if and when a subprocess or network call
-happens. Between tool calls it also streams progress notes on the same channel:
-`… <agent>: analyzing the workspace…`, a `✎` preview of the model's narration as
-it writes, `… completion round N/M` while it fills in missing report sections,
-`… recorded N structured finding(s)`, and `… compiling the final report` — so a
-long run (e.g. `threat_model`) visibly shows activity instead of looking stuck.
-When a weak model writes a report but never calls the capture tools, you'll also
-see the reliability layers kick in — `… transcribing the report into trackable
-items`, `… recovered N finding(s) from the report text`, or `salvaged N
-finding(s) from the consolidated report`.
-Output stays clean when piped (no ANSI, no spinner artifacts).
+and each external syscall (`⟫ exec: <command>` then `✓/✗ …`) tagged with the
+running agent — so you can see if and when a subprocess or network call happens.
+Between tool calls it streams progress notes: `… <agent>: analyzing the
+workspace…`, a `✎` preview of the model's narration, `… completion round N/M`,
+`… recorded N structured finding(s)`, and `… compiling the final report`. When a
+weak model writes a report but never calls the capture tools, you'll see the
+reliability layers kick in (`… transcribing the report into trackable items`,
+`… recovered N finding(s) from the report text`). Output stays clean when piped
+(no ANSI, no spinner artifacts).
 
 ## Safety posture
 
 - **PHRAK never interacts with a running application.** There is no HTTP client,
-  no proxy, no scanner, and no exploit runner anywhere in the tool. It cannot
-  send a request to a target because nothing in it can send one.
-- `code_review`, `threat_model`, `test_case`, and `generate_report` — the agents
-  that run by default — are all **read-only**: they read source and write
-  reports, and have **no HTTP or script-execution tool**.
-- **`verify` is the one agent that executes code**, and it is **off by default**
-  (`enable_verify: false`). When enabled, every PoC runs inside a container with
-  no network, a read-only rootfs, no capabilities, as `nobody`, under memory /
-  pid / wall-clock caps — never on the host. See
-  [The `verify` agent](#the-verify-agent-opt-in) for the full trade-off.
-- `test_case` produces a test *plan*, not an executor: it sends **no traffic to
-  any target**. Running the test cases is your own manual step, in an environment
-  you're authorised to test.
-- `phrak clone` reaches only the git host you name, shallow, with hooks disabled.
-- **No agent can reach the network unless you opt in.** There are exactly two
-  opt-ins, both **off by default**:
-  - `enable_git_clone: true` adds a guarded `git_clone` **tool** to `code_review`
-    (to pull a dependency's source in-tree for reading), under the same
-    guardrails as `phrak clone` — HTTPS/SSH only, shallow, hooks disabled,
-    size-capped, confined to `<workspace>/clones`.
-  - `enable_verify: true` plus `verify_network: bridge` would give a PoC
-    container network access. The default is `none`, and leaving it there is
-    strongly recommended — a PoC that needs the network is out of scope for
-    this agent.
-- **PHRAK stays local-first:** on the default `ollama` provider everything runs
-  on your box, and every outbound path is explicit and configured — nothing
-  leaves silently. Those paths are: `phrak clone` (and the opt-in `git_clone`
-  tool), pointing the Ollama `base_url` at a remote endpoint, and **choosing the
-  `anthropic` provider**,
-  which sends prompts (with the code excerpts the agents read) to the Anthropic
-  API. The provider is shown in the boot banner (`model anthropic:claude-opus-5`)
-  so you can always see which one a run used.
-- **API keys never enter the config or the index:** they live only in
-  `.phrack/credentials` (mode `0600`, no indexed file extension), are redacted
-  from `config --show`, and are passed to the SDK via an environment variable
-  rather than embedded in prompts or reports.
-- File tools are sandboxed to the workspace; subprocess calls (analyzers) never
-  use `shell=True` with model input.
-- Agents always pause for `ask_user` / `request_permission`; there is no mode
-  that auto-answers or auto-grants on the human's behalf.
-- **PHRAK never scans or attacks remote hosts. It does not use Nuclei.**
+  proxy, scanner, or exploit runner anywhere in the tool — it cannot send a
+  request to a target because nothing in it can send one.
+- `code_review`, `threat_model`, `test_case`, and `generate_report` (the agents
+  that run by default) are all **read-only**, with no HTTP or script-execution
+  tool. `test_case` produces a test *plan*, not an executor — running the cases is
+  your own manual step, in an environment you're authorised to test.
+- **`verify` is the one agent that executes code**, and it is **off by default**.
+  When enabled, every PoC runs inside a container with no network, a read-only
+  rootfs, no capabilities, as `nobody`, under memory / pid / wall-clock caps —
+  never on the host. See [The `verify` agent](#the-verify-agent-opt-in).
+- **No agent reaches the network unless you opt in.** There are exactly two
+  opt-ins, both off by default: `enable_git_clone` adds a guarded `git_clone`
+  **tool** to `code_review` (HTTPS/SSH only, shallow, hooks disabled, size-capped,
+  confined to `<workspace>/clones`); `enable_verify` + `verify_network: bridge`
+  would give a PoC container network access (the default `none` is strongly
+  recommended).
+- **Local-first:** on the default `ollama` provider everything runs on your box.
+  Every outbound path is explicit: `phrak clone` (and the opt-in `git_clone`),
+  pointing the Ollama `base_url` at a remote endpoint, and **choosing the
+  `anthropic` provider** (which sends prompts, with code excerpts, to the
+  Anthropic API). The provider is shown in the boot banner.
+- **API keys never enter the config or the index** — they live only in
+  `.phrack/credentials` (mode `0600`), are redacted from `config --show`, and are
+  passed to the SDK via an environment variable.
+- File tools are sandboxed to the workspace; subprocess calls never use
+  `shell=True` with model input. Agents always pause for `ask_user` /
+  `request_permission`. **PHRAK never scans or attacks remote hosts, and does not
+  use Nuclei.**
 
 ## Limitations (read these)
 
 - **This is the source half of a whitebox engagement, not the whole engagement.**
   PHRAK never observes the running application, so anything that depends on
-  deployment — reverse-proxy rules, WAF behaviour, runtime configuration,
-  environment variables, infrastructure — is outside what it can see. A finding
-  it reports as unreachable may be reachable in production, and vice versa.
+  deployment (reverse-proxy rules, WAF behaviour, runtime config, environment,
+  infrastructure) is outside what it can see. A finding it reports as unreachable
+  may be reachable in production, and vice versa.
 - LLM output quality tracks the local model you choose; **LLM confidence is not a
-  probability of exploitability.**
-- RAG retrieval is **not** proof of reachability.
-- **Taint coverage is Python and JS/TS only** (and not every bug class in
-  either). Outside that, findings stay `unconfirmed` leads — absence of a taint
-  path is absence of a *rule*, not evidence the code is safe.
-- Test cases are **generated, not run** — PHRAK never executes them, so each is a
-  hypothesis to verify until you work through it yourself against a system you're
-  authorised to test.
-- A `verify` PoC that doesn't land means **not demonstrated**, not "not
-  vulnerable" — the PoC may simply be wrong, or the bug may need a full app
-  stack.
+  probability of exploitability.** RAG retrieval is **not** proof of reachability.
+- **Taint coverage is Python and JS/TS only** (and not every bug class in either).
+  Outside that, findings stay `unconfirmed` leads — absence of a taint path is
+  absence of a *rule*, not evidence the code is safe.
+- Test cases are **generated, not run.** A `verify` PoC that doesn't land means
+  **not demonstrated**, not "not vulnerable."
 - **Human review remains required.**
 
 ## Tests
@@ -994,15 +755,12 @@ pytest                        # the whole bench
 pytest tests/test_store.py    # one module
 ```
 
-The bench is **offline by design** — no test reaches the network or a live
-model. Providers are faked (`tests/conftest.py::FakeLLM`), external CLIs
-(OpenGrep, `pip-audit`, the container runtime) are mocked, and every fixture
-writes into a `tmp_path` workspace, so nothing touches your real `.phrack/`.
-
-An `integration` marker is registered in `pyproject.toml` for tests that need a
-running Ollama or a live target; no test currently claims it, so
+The bench is **offline by design** — no test reaches the network or a live model.
+Providers are faked (`tests/conftest.py::FakeLLM`), external CLIs (OpenGrep,
+`pip-audit`, the container runtime) are mocked, and every fixture writes into a
+`tmp_path` workspace. An `integration` marker is registered in `pyproject.toml`
+for tests that need a running Ollama or live target; none currently claims it, so
 `pytest -m "not integration"` and a bare `pytest` run the same set.
-
 
 ## Project layout
 
@@ -1011,7 +769,6 @@ appsec/
   cli.py            argparse entry point (`phrak`) + the chat REPL loop
   app.py            bootstrap: config -> llm, skills, rag, orchestrator, registry
   base_agent.py     agent loop + registry + run-to-completion + finding persistence
-                    (incl. deterministic capture fallback when the model won't record)
   orchestrator.py   planner/router + DAG execution (parallel fan-out) + synthesis
                     + salvage of findings/test cases from the consolidated report
   extract.py        deterministic findings/test-case extraction from a prose report
@@ -1028,8 +785,7 @@ appsec/
   store.py          persistent finding/taint history (.phrack/findings, .phrack/taint)
   scope.py          declarative scope/target policy (.phrack/scope.yaml)
   clone.py          guarded shallow git clone
-  session_cmds.py   session-command helpers: findings triage (/findings, /triage,
-                    /note), manual finding entry, @file expansion, tool listing
+  session_cmds.py   session-command helpers: findings triage, manual entry, @file
   skill_store.py    saved-skills store (workspace + ~/.phrak global)
   skill_library.py  curated skills (appsec/skills/<agent>/*.md)
   file_assist.py    workspace overview + read-files-on-demand
@@ -1038,17 +794,13 @@ appsec/
   report.py         deterministic consolidated-report assembly (generate_report)
   testcase_cmds.py  non-agentic test-case backlog commands (list/status/link/add)
   models/           structured findings + taint models + test-case model
-  agents/           code_review, threat_model, test_case, generate_report,
-                    verify (opt-in)
+  agents/           code_review, threat_model, test_case, generate_report, verify
   analyzers/        AnalyzerAdapter base + opengrep, dependencies, sanitizers
                     rules/taint/   bundled OpenGrep taint rules (python, javascript)
   tools/            common (sandbox/subprocess/loopback+SSRF guard), filesystem,
                     analysis, opengrep_tools, analyzer_tools, findings_tool,
-                    rag_tool (semantic search), testcase_tool, clone_tool,
-                    verify_tool (sandboxed PoC runner + record_poc_result runtime
-                    verdict), interaction, skills_tool
-  skills/           curated skills: threat_model/*.md, code_review/*.md,
-                    test_case/*.md
+                    rag_tool, testcase_tool, clone_tool, verify_tool, interaction,
+                    skills_tool
 cli.py              thin shim so `python cli.py …` still works
 tests/              pytest bench (unit + marker-gated integration)
 ```
