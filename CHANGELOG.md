@@ -11,7 +11,13 @@ so entries below group work by theme rather than by a released version boundary.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **OpenAI and xAI Grok providers** — `phrak config` now offers `openai` and
+  `grok` alongside `ollama` and `anthropic`. Both run through the OpenAI client
+  (Grok via its OpenAI-compatible `https://api.x.ai/v1` endpoint); keys are
+  stored in `<workspace>/.phrack/credentials` as `OPENAI_API_KEY` / `XAI_API_KEY`.
+  Adds an optional `langchain-openai` dependency.
 
 ## [0.3.0] — 2026-09-08
 

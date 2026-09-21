@@ -9,7 +9,7 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from .banner import BGREEN, CYAN, DIM, GREEN, GREY, RESET, phrak_print
-from .llm import message_text
+from .llm import message_text, uses_verbalized_tool_calls
 
 THREAD_ID = "phrak-chat"
 
@@ -91,7 +91,7 @@ class ChatSession:
             system_prompt=SYSTEM_PROMPT,
             middleware=[
                 VerbalizedToolCallMiddleware(
-                    enabled=self.app.config.llm.provider.lower() != "anthropic"
+                    enabled=uses_verbalized_tool_calls(self.app.config.llm.provider)
                 )
             ],
             checkpointer=_make_saver(),

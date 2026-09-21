@@ -106,8 +106,8 @@ This installs two commands:
 `python cli.py …`.)
 
 Requires [Ollama](https://ollama.com) with a tool-capable model (default
-`qwen2.5-coder:7b`) — unless you choose the Anthropic provider, which needs only
-an API key. Optionally install [OpenGrep](https://opengrep.dev) for
+`qwen2.5-coder:7b`) — unless you choose a cloud provider (Anthropic, OpenAI, or
+xAI Grok), which needs only an API key. Optionally install [OpenGrep](https://opengrep.dev) for
 static-analysis leads (PHRAK degrades gracefully without it; see
 [static analysis](docs/static-analysis.md)).
 
@@ -123,19 +123,25 @@ provider, model settings, and embeddings backend. It writes
 wizard automatically; re-run mid-session with `/config`. Inspect the resolved
 config with `phrak config --show` (secret-looking values are redacted).
 
-### Model provider — Ollama or Claude
+### Model provider — Ollama, Claude, OpenAI, or Grok
 
 | Provider | What it means |
 |----------|---------------|
 | `ollama` *(default)* | Fully local. Nothing leaves the machine. Asks for model, base URL, and temperature. |
 | `anthropic` | Claude via the Anthropic API. Asks for the model (default `claude-opus-5`, or `claude-sonnet-5` / `claude-haiku-4-5`), a max-output-token cap, and your API key. **Prompts — including the code excerpts the agents read — are sent to Anthropic.** |
+| `openai` | GPT via the OpenAI API. Asks for the model (default `gpt-5`, or `gpt-5-mini` / `gpt-4.1`), a max-output-token cap, and your API key. **Prompts are sent to OpenAI.** |
+| `grok` | xAI Grok (OpenAI-wire-compatible). Asks for the model (default `grok-4`, or `grok-3` / `grok-3-mini`), a max-output-token cap, and your API key. **Prompts are sent to xAI.** |
 
 **The API key is stored in `<workspace>/.phrack/credentials`** (mode `0600`),
-never in `config.yaml`. At startup PHRAK exports it as `ANTHROPIC_API_KEY`; a key
-stored for the workspace takes precedence over one already in your shell. If the
-provider is `anthropic` and no key is found, PHRAK says so at startup instead of
-failing on the first model call. Re-run `phrak config` to rotate it (Enter keeps
-the stored one), or edit/delete `.phrack/credentials` directly.
+never in `config.yaml`. At startup PHRAK exports it as `ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, or `XAI_API_KEY`; a key stored for the workspace takes
+precedence over one already in your shell. If the chosen cloud provider has no
+key, PHRAK says so at startup instead of failing on the first model call. Re-run
+`phrak config` to rotate it (Enter keeps the stored one), or edit/delete
+`.phrack/credentials` directly.
+
+> **Reasoning models** (OpenAI's o-series / GPT-5) may reject a non-default
+> `temperature`. If you hit a 400, set `temperature: 1` for that model.
 
 Per-agent overrides work across providers — e.g. a local model for `code_review`
 and Claude for `threat_model`:
@@ -147,9 +153,9 @@ agent_models:
     model: claude-opus-5
 ```
 
-Embeddings for `/ask` are **always local** (Anthropic has no embeddings API);
-with the `anthropic` provider, set `rag.embeddings.base_url` if your Ollama
-server isn't at `http://localhost:11434`.
+Embeddings for `/ask` are **always local**; with any cloud provider, set
+`rag.embeddings.base_url` if your Ollama server isn't at
+`http://localhost:11434`.
 
 ### The `.phrack/` directory
 
@@ -184,7 +190,7 @@ commented file; the knobs worth knowing:
 | Key | Default | What it controls |
 |-----|---------|------------------|
 | `llm.provider` / `llm.model` | `ollama` / `qwen2.5-coder:7b` | Where the model runs and which one |
-| `llm.num_ctx` / `llm.max_tokens` | `16384` / `16000` | Ollama context window / Anthropic output cap |
+| `llm.num_ctx` / `llm.max_tokens` | `16384` / `16000` | Ollama context window / cloud-provider output cap |
 | `rag.*` | see example | Index location, `recall_k`, `chunk_lines`/`chunk_overlap`, `max_file_kb`, embeddings backend |
 | `orchestrator.mode` | `dag` | `dag` (graph + parallel fan-out) or `linear` |
 | `orchestrator.max_concurrency` | `3` | Bounded parallel agents per wave |
@@ -323,9 +329,9 @@ The README is the overview; the deep dives live under [`docs/`](docs/):
   recommended).
 - **Local-first:** on the default `ollama` provider everything runs on your box.
   Every outbound path is explicit: `phrak clone` (and the opt-in `git_clone`),
-  pointing the Ollama `base_url` at a remote endpoint, and **choosing the
-  `anthropic` provider** (which sends prompts, with code excerpts, to the
-  Anthropic API). The provider is shown in the boot banner.
+  pointing the Ollama `base_url` at a remote endpoint, and **choosing a cloud
+  provider** (`anthropic` / `openai` / `grok`, which send prompts, with code
+  excerpts, to that provider's API). The provider is shown in the boot banner.
 - **API keys never enter the config or the index** — they live only in
   `.phrack/credentials` (mode `0600`), are redacted from `config --show`, and are
   passed to the SDK via an environment variable.

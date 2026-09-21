@@ -5,21 +5,30 @@
 # so ".phrack/rag" means "<workspace>/.phrack/rag".
 
 llm:
-  provider: ollama              # ollama (local) | anthropic (Claude API)
+  provider: ollama              # ollama | anthropic | openai | grok
   model: qwen2.5-coder:7b       # any pulled Ollama model
   base_url: http://localhost:11434  # Ollama server URL
   temperature: 0.1
   num_ctx: 16384               # ollama context window (code default: 16384)
-  max_tokens: 16000            # anthropic only: output cap per response
+  max_tokens: 16000            # cloud providers: output cap per response
 
-# Claude instead of a local model — `phrak config` and pick "anthropic":
+# A cloud model instead of a local one — `phrak config` and pick the provider:
 # llm:
-#   provider: anthropic
+#   provider: anthropic        # Claude API
 #   model: claude-opus-5       # or claude-sonnet-5 / claude-haiku-4-5
 #   base_url: ""               # empty -> the SDK's own endpoint
 #   max_tokens: 16000
+# llm:
+#   provider: openai           # OpenAI API
+#   model: gpt-5               # or gpt-5-mini / gpt-4.1 / any model ID
+#   base_url: ""               # empty -> the SDK's own endpoint
+# llm:
+#   provider: grok             # xAI Grok (OpenAI-wire-compatible)
+#   model: grok-4              # or grok-3 / grok-3-mini
+#   base_url: https://api.x.ai/v1
 # The API key is NEVER stored here. It lives in <workspace>/.phrack/credentials
-# (mode 0600) and is exported as ANTHROPIC_API_KEY at startup.
+# (mode 0600) and is exported as ANTHROPIC_API_KEY / OPENAI_API_KEY / XAI_API_KEY
+# at startup.
 
 rag:                           # codebase index powering `/ask`
   persist_dir: .phrack/rag     # relative -> <workspace>/.phrack/rag

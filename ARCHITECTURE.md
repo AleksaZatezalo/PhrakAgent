@@ -75,7 +75,7 @@ appsec/
   coverage.py       link test cases to findings + backfill a test case per finding
   chat.py           conversational session (multi-turn, tool use, thread memory)
   repl.py           chat REPL helpers (readline autocomplete/history, grouped /help)
-  llm.py            chat-model factory (ollama | anthropic) + model registry
+  llm.py            chat-model factory (ollama | anthropic | openai | grok) + model registry
   middleware.py     rescues "verbalized" tool calls from weaker local models
   runtime.py        process/run-scoped context (config, active agent, findings,
                     tool ledger — context-vars, so parallel agents stay isolated)

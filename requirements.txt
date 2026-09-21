@@ -3,6 +3,7 @@ langchain>=1.0
 langchain-core>=1.0
 langchain-ollama
 langchain-anthropic # optional 'anthropic' provider — Claude via the Anthropic API
+langchain-openai    # optional 'openai'/'grok' providers — OpenAI API and xAI Grok
 langchain-chroma
 chromadb
 pyyaml

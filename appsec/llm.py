@@ -6,9 +6,21 @@ Date Created: 08-01-2026
 
 from __future__ import annotations
 
+import os
+
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from .config import Config, LLMConfig
+from .config import OLLAMA_DEFAULT_URL, XAI_DEFAULT_URL, Config, LLMConfig
+
+# Providers whose models emit native tool calls reliably. The verbalized
+# tool-call middleware — a text-protocol fallback for models that don't — is
+# only wired in for the others (local Ollama models). See base_agent/chat.
+_NATIVE_TOOL_CALL_PROVIDERS = frozenset({"anthropic", "openai", "grok"})
+
+
+def uses_verbalized_tool_calls(provider: str) -> bool:
+    """Whether an agent needs the text-based tool-call fallback middleware."""
+    return provider.lower() not in _NATIVE_TOOL_CALL_PROVIDERS
 
 # Claude models that removed the sampling parameters: sending `temperature`
 # to any of these is a 400, so it is dropped rather than passed through.
@@ -36,8 +48,10 @@ def prompt_char_budget(cfg: LLMConfig) -> int:
     one sized for Claude overflows Ollama. English runs ~3.5 chars/token; half
     the window is budgeted so the system prompt and the answer still fit.
     """
-    if cfg.provider.lower() == "anthropic":
-        return 240_000  # ~70k tokens — well inside every current Claude window
+    if cfg.provider.lower() != "ollama":
+        # Cloud providers (Claude/OpenAI/Grok) all carry large context windows;
+        # ~70k tokens sits well inside every current one.
+        return 240_000
     return max(4_000, int(cfg.num_ctx * 3.5 * 0.5))
 
 
@@ -147,9 +161,44 @@ def build_chat_model(cfg: LLMConfig) -> BaseChatModel:
                 "or export ANTHROPIC_API_KEY in the shell."
             ) from e
 
+    if provider in ("openai", "grok"):
+        # xAI's Grok speaks the OpenAI wire protocol, so both ride the same
+        # client — Grok just points at the x.ai endpoint with its own key.
+        from langchain_openai import ChatOpenAI
+
+        kwargs = {
+            "model": cfg.model,
+            "max_tokens": cfg.max_tokens,
+            # Sent as-is. Some OpenAI reasoning models (o-series / gpt-5) only
+            # accept the default temperature; set it to 1 in config for those.
+            "temperature": cfg.temperature,
+        }
+        if provider == "grok":
+            base = cfg.base_url
+            # A hand-written config may leave base_url at the dataclass default
+            # (the Ollama URL); steer it back to x.ai's endpoint.
+            if not base or base == OLLAMA_DEFAULT_URL:
+                base = XAI_DEFAULT_URL
+            kwargs["base_url"] = base
+            # ChatOpenAI reads OPENAI_API_KEY by default; Grok's key lives under
+            # XAI_API_KEY, so pass it explicitly.
+            kwargs["api_key"] = os.environ.get("XAI_API_KEY")
+        elif cfg.base_url:  # openai: allow a custom/proxy endpoint; else default
+            kwargs["base_url"] = cfg.base_url
+        try:
+            return ChatOpenAI(**kwargs)
+        except Exception as e:
+            var = "XAI_API_KEY" if provider == "grok" else "OPENAI_API_KEY"
+            raise RuntimeError(
+                f"Could not build the {provider} client for '{cfg.model}': {e}\n"
+                "Store a key with:  python cli.py setup\n"
+                f"or export {var} in the shell."
+            ) from e
+
     raise ValueError(
         f"Unknown LLM provider: {cfg.provider!r}. Supported providers are "
-        f"'ollama' (local) and 'anthropic' (Claude API)."
+        f"'ollama' (local), 'anthropic' (Claude API), 'openai' (OpenAI API), "
+        f"and 'grok' (xAI Grok API)."
     )
 
 

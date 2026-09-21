@@ -15,7 +15,7 @@ from langchain_core.tools import BaseTool
 
 from . import file_assist
 from .config import Config
-from .llm import message_text
+from .llm import message_text, uses_verbalized_tool_calls
 from .skill_store import SkillStore
 
 # A tool factory returns the tools for an agent. It's a callable (not a static
@@ -214,7 +214,7 @@ class Agent:
             system_prompt=self._system_prompt(task),
             middleware=[
                 VerbalizedToolCallMiddleware(
-                    enabled=self.config.llm.provider.lower() != "anthropic"
+                    enabled=uses_verbalized_tool_calls(self.config.llm.provider)
                 )
             ],
             checkpointer=_make_saver(),  # keep context across completion rounds

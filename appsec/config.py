@@ -28,16 +28,30 @@ DEFAULT_CONFIG_PATH = f"{PHRACK_DIRNAME}/{CONFIG_FILENAME}"
 # Where an Ollama server lives when nothing says otherwise.
 OLLAMA_DEFAULT_URL = "http://localhost:11434"
 
-# Providers PHRAK can drive. "ollama" keeps everything on the box; "anthropic"
-# sends prompts (and the code excerpts in them) to the Anthropic API.
-PROVIDERS = ("ollama", "anthropic")
+# xAI's Grok API is OpenAI-wire-compatible, so it's driven through the OpenAI
+# client pointed at this endpoint (see llm.build_chat_model).
+XAI_DEFAULT_URL = "https://api.x.ai/v1"
 
-# Suggested Claude models, most capable first. The wizard offers the first as
-# the default; any model ID the API accepts can be typed in instead.
+# Providers PHRAK can drive. "ollama" keeps everything on the box; the cloud
+# providers send prompts (and the code excerpts in them) to their own API.
+PROVIDERS = ("ollama", "anthropic", "openai", "grok")
+
+# Suggested models per cloud provider, most capable first. The wizard offers the
+# first as the default; any model ID the API accepts can be typed in instead.
 ANTHROPIC_MODELS = (
     "claude-opus-5",  # most capable; the default
     "claude-sonnet-5",  # faster/cheaper, near-Opus on coding
     "claude-haiku-4-5",  # cheapest, for simple passes
+)
+OPENAI_MODELS = (
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-4.1",
+)
+GROK_MODELS = (
+    "grok-4",
+    "grok-3",
+    "grok-3-mini",
 )
 
 
@@ -69,7 +83,7 @@ def credentials_path(workspace: str | Path = ".") -> Path:
 
 @dataclass
 class LLMConfig:
-    provider: str = "ollama"  # ollama (local) | anthropic (Claude API)
+    provider: str = "ollama"  # ollama (local) | anthropic | openai | grok
     model: str = "qwen2.5-coder:7b"
     base_url: str = OLLAMA_DEFAULT_URL  # Ollama server URL; "" -> provider default
     temperature: float = 0.1  # dropped for Claude models that reject it
@@ -83,11 +97,24 @@ def provider_defaults(provider: str) -> LLMConfig:
     Used when a per-agent override switches provider, where inheriting the base
     provider's model and endpoint would be wrong.
     """
-    if provider.lower() == "anthropic":
+    p = provider.lower()
+    if p == "anthropic":
         return LLMConfig(
             provider="anthropic",
             model=ANTHROPIC_MODELS[0],
             base_url="",  # the SDK's own endpoint
+        )
+    if p == "openai":
+        return LLMConfig(
+            provider="openai",
+            model=OPENAI_MODELS[0],
+            base_url="",  # the SDK's own endpoint
+        )
+    if p == "grok":
+        return LLMConfig(
+            provider="grok",
+            model=GROK_MODELS[0],
+            base_url=XAI_DEFAULT_URL,  # xAI's OpenAI-compatible endpoint
         )
     return LLMConfig(provider=provider)
 
@@ -441,39 +468,80 @@ def _setup_ollama() -> LLMConfig:
     return llm
 
 
-def _setup_anthropic(workspace: str) -> LLMConfig:
-    """Configure the Claude provider and store its API key under ``.phrack``."""
+def _pick_model(models: tuple[str, ...]) -> str:
+    """Show a numbered model menu; accept a number, or any typed model ID."""
+    print("Suggested models:")
+    for i, name in enumerate(models, 1):
+        print(f"  {i}) {name}")
+    choice = _ask("Model", models[0])
+    if choice.isdigit() and 1 <= int(choice) <= len(models):
+        return models[int(choice) - 1]
+    return choice
+
+
+def _store_provider_key(workspace: str, provider: str) -> None:
+    """Prompt for a provider's API key and store it under ``.phrack``."""
     from .credentials import PROVIDER_ENV_VARS, get_key, set_key
 
-    print("\nClaude runs in Anthropic's cloud: prompts — including the code")
-    print("excerpts the agents read — are sent to the Anthropic API.\n")
-    print("Suggested models:")
-    for i, name in enumerate(ANTHROPIC_MODELS, 1):
-        print(f"  {i}) {name}")
-    choice = _ask("Model", ANTHROPIC_MODELS[0])
-    model = (
-        ANTHROPIC_MODELS[int(choice) - 1]
-        if choice.isdigit() and 1 <= int(choice) <= len(ANTHROPIC_MODELS)
-        else choice
-    )
-    # base_url stays empty: the SDK's own endpoint. temperature is left at the
-    # dataclass default and only sent for models that still accept it (see llm.py).
-    llm = provider_defaults("anthropic")
-    llm.model = model
-    llm.max_tokens = int(_ask("Max output tokens per response", str(llm.max_tokens)))
-
-    var = PROVIDER_ENV_VARS["anthropic"]
-    existing = get_key(workspace, "anthropic")
+    var = PROVIDER_ENV_VARS[provider]
+    existing = get_key(workspace, provider)
     prompt = f"{var}" + (" (Enter to keep the stored key)" if existing else "")
     key = _ask_secret(prompt)
     if key:
-        dest = set_key(workspace, "anthropic", key)
+        dest = set_key(workspace, provider, key)
         print(f"  key stored in {dest} (mode 0600)")
     elif existing:
         print(f"  keeping the key already in {credentials_path(workspace)}")
     else:
         print(f"  no key given — set one later with `phrak config`, or export {var}.")
+
+
+def _setup_cloud(
+    workspace: str, provider: str, models: tuple[str, ...], blurb: str
+) -> LLMConfig:
+    """Configure a cloud provider and store its API key under ``.phrack``.
+
+    Shared by the Claude / OpenAI / Grok wizard branches: they differ only in
+    the intro blurb, the suggested-model list, and which env var the key lands
+    in. base_url is left at the provider's default and temperature stays at the
+    dataclass default (only sent to models that accept it — see llm.py).
+    """
+    print(f"\n{blurb}\n")
+    llm = provider_defaults(provider)
+    llm.model = _pick_model(models)
+    llm.max_tokens = int(_ask("Max output tokens per response", str(llm.max_tokens)))
+    _store_provider_key(workspace, provider)
     return llm
+
+
+def _setup_anthropic(workspace: str) -> LLMConfig:
+    return _setup_cloud(
+        workspace,
+        "anthropic",
+        ANTHROPIC_MODELS,
+        "Claude runs in Anthropic's cloud: prompts — including the code\n"
+        "excerpts the agents read — are sent to the Anthropic API.",
+    )
+
+
+def _setup_openai(workspace: str) -> LLMConfig:
+    return _setup_cloud(
+        workspace,
+        "openai",
+        OPENAI_MODELS,
+        "OpenAI runs in OpenAI's cloud: prompts — including the code\n"
+        "excerpts the agents read — are sent to the OpenAI API.",
+    )
+
+
+def _setup_grok(workspace: str) -> LLMConfig:
+    return _setup_cloud(
+        workspace,
+        "grok",
+        GROK_MODELS,
+        "Grok runs in xAI's cloud: prompts — including the code\n"
+        "excerpts the agents read — are sent to the xAI API.",
+    )
 
 
 def run_setup(path: str | None = None) -> Config:
@@ -498,13 +566,22 @@ def run_setup(path: str | None = None) -> Config:
     print("\nModel provider:")
     print("  1) ollama     — fully local, nothing leaves this machine (default)")
     print("  2) anthropic  — Claude API; needs a key, sends prompts to Anthropic")
+    print("  3) openai     — OpenAI API; needs a key, sends prompts to OpenAI")
+    print("  4) grok       — xAI Grok API; needs a key, sends prompts to xAI")
     choice = _ask("Provider", "1")
-    provider = {"1": "ollama", "2": "anthropic"}.get(choice, choice.lower())
+    provider = {"1": "ollama", "2": "anthropic", "3": "openai", "4": "grok"}.get(
+        choice, choice.lower()
+    )
     if provider not in PROVIDERS:
         print(f"  unknown provider {provider!r} — falling back to ollama.")
         provider = "ollama"
 
-    llm = _setup_anthropic(workspace) if provider == "anthropic" else _setup_ollama()
+    cloud_setups = {
+        "anthropic": _setup_anthropic,
+        "openai": _setup_openai,
+        "grok": _setup_grok,
+    }
+    llm = cloud_setups[provider](workspace) if provider in cloud_setups else _setup_ollama()
 
     print("\nEmbeddings for the codebase index (/ask retrieval) — always local:")
     print("  1) default  (local, no extra model needed)")

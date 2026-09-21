@@ -52,7 +52,7 @@ template instead.
 - PHRAK version (`phrak --version`):
 - Python (`python --version`):
 - OS:
-- Model provider: <!-- ollama / anthropic -->
+- Model provider: <!-- ollama / anthropic / openai / grok -->
 - Model:
 - Opengrep installed (`opengrep --version`): <!-- yes+version / no -->
 

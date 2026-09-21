@@ -15,6 +15,8 @@ from .config import Config, credentials_path
 # means adding a row here plus a branch in llm.build_chat_model.
 PROVIDER_ENV_VARS: dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "grok": "XAI_API_KEY",  # xAI's Grok, driven through the OpenAI client
 }
 
 

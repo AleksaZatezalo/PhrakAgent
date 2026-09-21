@@ -13,6 +13,7 @@ dependencies = [
     "langchain-core>=1.0",
     "langchain-ollama",
     "langchain-anthropic",   # optional 'anthropic' provider (Claude API)
+    "langchain-openai",      # optional 'openai'/'grok' providers (OpenAI API, xAI Grok)
     "langchain-chroma",
     "chromadb",
     "pyyaml",

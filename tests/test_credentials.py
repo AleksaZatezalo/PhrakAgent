@@ -152,7 +152,7 @@ def test_sampling_free_model_sends_no_temperature(anthropic_config, workspace):
 
 def test_unknown_provider_raises():
     with pytest.raises(ValueError, match="Unknown LLM provider"):
-        build_chat_model(LLMConfig(provider="openai"))
+        build_chat_model(LLMConfig(provider="gemini"))
 
 
 # ----------------------------------------------------------- embeddings URL
