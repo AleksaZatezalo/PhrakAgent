@@ -1,10 +1,11 @@
 """
 Description: DAG planner + verify agent integration.
 
-The verify agent is opt-in. When enable_verify is True and the agent is
-registered, the DAG planner prompt should mention it as an option, and a
-default "assess this app" plan should schedule a verify task that depends on
-code_review. When enable_verify is False, verify must not appear.
+The verify agent is opt-in on two levels. `enable_verify` registers the agent
+(so it can be run deliberately). `auto_verify` — off by default even then — is
+what lets the DAG planner AUTO-schedule it inside a full "assess this app" run:
+only with auto_verify on does the planner prompt carry the verify-scheduling
+rule. When the agent isn't registered, verify must not appear at all.
 """
 
 from __future__ import annotations
@@ -135,6 +136,7 @@ def test_planner_prompt_includes_verify_guidance_when_available(config):
     reply = json.dumps(
         {"tasks": [{"id": "t1", "agent": "code_review", "task": "review"}]}
     )
+    config.auto_verify = True  # guidance is only injected when auto-verify is on
     orch = _orch(CapturingLLM(reply=reply), config, include_verify=True)
     orch.plan_dag("assess this app")
     # The first invocation is the DAG planner prompt.
@@ -170,6 +172,30 @@ def test_planner_prompt_omits_verify_when_unavailable(config):
     # guidance line ("verify agent"/"verify task") should be absent.
     assert "verify agent" not in prompt
     assert "verify task" not in prompt
+
+
+def test_planner_prompt_omits_verify_guidance_when_auto_verify_off(config):
+    """Registered but auto_verify off (the default): the agent is available for a
+    deliberate `verify <id>`, but the planner is NOT told to schedule it, so a
+    full run never silently runs PoCs."""
+    captured = {"prompts": []}
+
+    class CapturingLLM(FakeLLM):
+        def invoke(self, prompt, **k):
+            captured["prompts"].append(
+                prompt if isinstance(prompt, str) else str(prompt)
+            )
+            return super().invoke(prompt, **k)
+
+    reply = json.dumps(
+        {"tasks": [{"id": "t1", "agent": "code_review", "task": "review"}]}
+    )
+    assert config.auto_verify is False  # the default
+    orch = _orch(CapturingLLM(reply=reply), config, include_verify=True)
+    orch.plan_dag("assess this app")
+    prompt = (captured["prompts"][0] or "").lower()
+    assert "verify task" not in prompt
+    assert "verify agent" not in prompt
 
 
 # ------------------------------- execution
