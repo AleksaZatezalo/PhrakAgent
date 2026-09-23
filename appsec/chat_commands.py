@@ -215,6 +215,31 @@ def _h_verify(ctx: ChatContext) -> None:
     print()
 
 
+def _h_poc(ctx: ChatContext) -> None:
+    from .poc_cmds import list_pocs, poc_detail
+
+    if ctx.rest.strip():
+        print()
+        render_markdown(poc_detail(ctx.app, ctx.rest.strip()))
+        print()
+    else:
+        print(list_pocs(ctx.app))
+
+
+def _h_poc_run(ctx: ChatContext) -> None:
+    from .poc_cmds import run_poc
+
+    toks = ctx.rest.split()
+    if not toks:
+        print("usage: /poc-run <POC-id> [target-url]")
+        return
+    poc_id = toks[0]
+    target = toks[1] if len(toks) > 1 else ""
+    print()
+    render_markdown(run_poc(ctx.app, poc_id, target))
+    print()
+
+
 def _h_benchmark(ctx: ChatContext) -> None:
     from . import benchmark
 
@@ -468,6 +493,20 @@ COMMANDS: tuple[Command, ...] = (
         "/verify <id>",
         "run a sandboxed PoC against one finding (opt-in: enable_verify)",
         _h_verify,
+    ),
+    Command(
+        ("poc",),
+        "findings",
+        "/poc [id]",
+        "list recorded PoCs, or show one in full",
+        _h_poc,
+    ),
+    Command(
+        ("poc-run",),
+        "findings",
+        "/poc-run <id> [url]",
+        "run a saved PoC against a locally deployed target (opt-in)",
+        _h_poc_run,
     ),
     Command(
         ("see_threatmodel", "see-threatmodel"),

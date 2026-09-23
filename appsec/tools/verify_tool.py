@@ -25,6 +25,7 @@ reports the deficiency instead of executing.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -82,12 +83,36 @@ def _runtime_binary(cfg) -> tuple[str, str]:
     return "", ""
 
 
+def _reachable_from_sandbox(target: str) -> str:
+    """Rewrite a host-local URL so it resolves from inside the container.
+
+    A PoC run against a locally deployed target says ``http://localhost:8000`` —
+    but inside the sandbox ``localhost`` is the container itself. With
+    ``--add-host host.docker.internal:host-gateway`` the host is reachable under
+    that name, so point loopback URLs at it.
+    """
+    return re.sub(
+        r"(^https?://)(localhost|127\.0\.0\.1)(?=[:/]|$)",
+        r"\1host.docker.internal",
+        target.strip(),
+    )
+
+
 def run_poc_sandboxed(
     script: str,
     kind: str = "python",
     mount_workspace: bool = False,
+    network: str | None = None,
+    target: str = "",
 ) -> VerifyResult:
     """Execute ``script`` inside a locked-down container.
+
+    ``target`` (a URL) runs the PoC against a locally deployed service: the host
+    is exposed as ``host.docker.internal`` and the target is handed to the PoC in
+    ``$PHRAK_TARGET``. A live target needs egress, so the network defaults to
+    ``bridge`` in that case (``network`` overrides either way). Every other guard
+    — read-only root, dropped caps, nobody user, mem/pid caps, wall-clock kill —
+    still applies; nothing here makes the PoC safe to run destructively.
 
     Never raises for policy failures — returns a VerifyResult with .error set so
     the agent sees a normal tool return rather than a stack trace.
@@ -138,12 +163,15 @@ def run_poc_sandboxed(
         script_file.write_text(script)
         script_file.chmod(0o755)
 
+        # A live target needs egress; default to bridge for it, else honour the
+        # configured network (none by default). An explicit `network` wins.
+        net = network or (("bridge" if target else None) or cfg.verify_network or "none")
         cmd = [
             binary,
             "run",
             "--rm",
             "--network",
-            str(cfg.verify_network or "none"),
+            str(net),
             "--read-only",
             "--tmpfs",
             "/tmp:rw,size=64m,mode=1777",
@@ -165,6 +193,11 @@ def run_poc_sandboxed(
         if mount_workspace:
             ws = Path(cfg.paths.workspace).expanduser().resolve()
             cmd += ["-v", f"{ws}:/workspace:ro", "-e", "PHRAK_WORKSPACE=/workspace"]
+        if target:
+            # Expose the host so a locally deployed target is reachable, and hand
+            # the (rewritten) URL to the PoC via $PHRAK_TARGET.
+            cmd += ["--add-host", "host.docker.internal:host-gateway"]
+            cmd += ["-e", f"PHRAK_TARGET={_reachable_from_sandbox(target)}"]
         cmd.append(cfg.verify_image or "python:3.12-slim")
         cmd += _KINDS[kind]
 
@@ -246,9 +279,11 @@ def record_poc_result(
             "Use the finding id shown in your context."
         )
 
-    saved = _save_poc(cfg, rec0.id, poc)
+    from ..poc_store import PocStore
+
+    poc_rec = PocStore(cfg).save(rec0.id, poc, outcome=outcome, note=note)
     tail = _poc_tail(poc)
-    where = f"(saved: {saved})" if saved else ""
+    where = f"(poc {poc_rec.id})" if poc_rec else ""
     detail = " ".join(p for p in (note.strip(), tail, where) if p).strip()
 
     if outcome == "inconclusive":
@@ -269,32 +304,6 @@ def record_poc_result(
         confidence=conf,
     )
     return f"RECORDED runtime verdict — {msg}. {where}".strip()
-
-
-def _save_poc(cfg, finding_id: str, poc: str) -> str:
-    """Persist a PoC script under ``.phrack/pocs`` so the run is auditable.
-
-    Named ``<FND-id>-<UTC-timestamp>.<py|sh>`` so successive attempts on the same
-    finding never clobber each other. Best-effort: a write failure returns "" and
-    the verdict is still recorded (the one-line tail stays in the finding note).
-    """
-    poc = (poc or "").strip()
-    if not poc:
-        return ""
-    import re
-    from datetime import datetime, timezone
-
-    first = poc.splitlines()[0] if poc else ""
-    ext = "sh" if re.match(r"^#!.*\b(sh|bash|zsh)\b", first) else "py"
-    try:
-        d = cfg.pocs_dir()
-        d.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        path = d / f"{finding_id}-{ts}.{ext}"
-        path.write_text(poc)
-        return str(path)
-    except Exception:
-        return ""
 
 
 def _poc_tail(poc: str) -> str:

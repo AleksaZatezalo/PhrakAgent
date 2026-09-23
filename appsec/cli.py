@@ -552,6 +552,31 @@ def cmd_verify(args) -> int:
     return 0
 
 
+def cmd_poc(args) -> int:
+    """List recorded PoCs, or show one in full with `phrak poc <POC-id>`."""
+    app = _load_app(args)
+    from .poc_cmds import list_pocs, poc_detail
+
+    if not getattr(args, "quiet", False):
+        print(mini_banner())
+    if args.id:
+        render_markdown(poc_detail(app, args.id))
+    else:
+        print(list_pocs(app))
+    return 0
+
+
+def cmd_poc_run(args) -> int:
+    """Run a saved PoC against a locally deployed target (opt-in: enable_verify)."""
+    app = _load_app(args)
+    from .poc_cmds import run_poc
+
+    if not getattr(args, "quiet", False):
+        print(mini_banner())
+    render_markdown(run_poc(app, args.id, args.target))
+    return 0
+
+
 def cmd_benchmark(args) -> int:
     """Compare models on the labeled target: recall, precision, token cost.
 
@@ -757,6 +782,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("id", help="finding id to verify (e.g. FND-284b4aac0d)")
     sp.set_defaults(func=cmd_verify)
+
+    sp = sub.add_parser(
+        "poc", help="list recorded PoCs, or show one: `phrak poc <POC-id>`"
+    )
+    sp.add_argument("id", nargs="?", default="", help="show this PoC in full")
+    sp.set_defaults(func=cmd_poc)
+
+    sp = sub.add_parser(
+        "poc-run",
+        help="run a saved PoC against a locally deployed target (opt-in)",
+    )
+    sp.add_argument("id", help="PoC id to run (e.g. POC-1a2b3c4d5e)")
+    sp.add_argument(
+        "target",
+        nargs="?",
+        default="",
+        help="target URL (default: config verify_target), e.g. http://localhost:8000",
+    )
+    sp.set_defaults(func=cmd_poc_run)
 
     sp = sub.add_parser(
         "benchmark",

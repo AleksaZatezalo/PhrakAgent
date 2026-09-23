@@ -246,6 +246,10 @@ class Config:
     # Memory / process caps for the sandbox.
     verify_memory_mb: int = 512
     verify_pids: int = 128
+    # Default target URL for running a saved PoC against a locally deployed
+    # service (`phrak poc-run <id>` / `/poc-run <id>`). Empty -> pass a URL on
+    # the command line. A loopback URL is auto-rewritten to reach the host.
+    verify_target: str = ""
     orchestrator: OrchestratorConfig = field(default_factory=OrchestratorConfig)
     analyzers: AnalyzersConfig = field(default_factory=AnalyzersConfig)
     # Per-agent LLM overrides, e.g. {"threat_model": {"model": "glm-4.7-flash"}}.
@@ -292,6 +296,7 @@ class Config:
             verify_network=str(raw.get("verify_network", "none")),
             verify_memory_mb=int(raw.get("verify_memory_mb", 512)),
             verify_pids=int(raw.get("verify_pids", 128)),
+            verify_target=str(raw.get("verify_target", "")),
             agent_models=dict(raw.get("agent_models") or {}),
         )
 
@@ -400,6 +405,7 @@ class Config:
             "verify_network": self.verify_network,
             "verify_memory_mb": self.verify_memory_mb,
             "verify_pids": self.verify_pids,
+            "verify_target": self.verify_target,
             "agent_models": self.agent_models,
         }
 
