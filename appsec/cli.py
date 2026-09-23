@@ -552,6 +552,23 @@ def cmd_verify(args) -> int:
     return 0
 
 
+def cmd_test(args) -> int:
+    """Agentically execute a test case against the running app + record a PoC."""
+    app = _load_app(args)
+    from .verify_cmds import build_test_task
+
+    task, err = build_test_task(app, args.id)
+    if err:
+        print(f"error: {err}", file=sys.stderr)
+        return 2
+    print(mini_banner())
+    phrak_print(f"testing {BGREEN}{args.id}{RESET} against the running app ...\n")
+    out = app.orchestrator.run_agent("verify", task)
+    render_markdown(out)
+    _land_report(app, app.orchestrator.save_agent_report("verify", task, out))
+    return 0
+
+
 def cmd_poc(args) -> int:
     """List recorded PoCs, or show one in full with `phrak poc <POC-id>`."""
     app = _load_app(args)
@@ -782,6 +799,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("id", help="finding id to verify (e.g. FND-284b4aac0d)")
     sp.set_defaults(func=cmd_verify)
+
+    sp = sub.add_parser(
+        "test",
+        help="agentically run a test case against the running app + record a PoC",
+    )
+    sp.add_argument("id", help="test case id to execute (e.g. TC-1a2b3c)")
+    sp.set_defaults(func=cmd_test)
 
     sp = sub.add_parser(
         "poc", help="list recorded PoCs, or show one: `phrak poc <POC-id>`"

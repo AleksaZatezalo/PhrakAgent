@@ -11,10 +11,11 @@ from types import SimpleNamespace
 import pytest
 
 from appsec.models.findings import FindingEvidence, SecurityFinding
+from appsec.models.testcases import SecurityTestCase
 from appsec.poc_store import PocStore
-from appsec.store import FindingStore
+from appsec.store import FindingStore, TestCaseStore
 from appsec.tools.verify_tool import record_poc_result
-from appsec.verify_cmds import build_verify_task
+from appsec.verify_cmds import build_test_task, build_verify_task
 
 
 def _seed_finding(config) -> str:
@@ -95,4 +96,48 @@ def test_build_verify_task_scopes_to_one_finding(runtime):
     assert err == ""
     assert fid in task
     assert "Verify ONLY" in task
+    assert "record_poc_result" in task
+
+
+# ------------------------------------------------------ /test (test case) tasks
+def _seed_test_case(config, finding_id="") -> str:
+    tc = SecurityTestCase(
+        title="SQLi via id param",
+        target="/user?id=",
+        steps=["send id=1' OR '1'='1", "observe extra rows"],
+        expected_result="extra rows returned",
+        severity="high",
+        finding_id=finding_id,
+    )
+    return TestCaseStore(config).upsert([tc])[0].id
+
+
+def test_build_test_task_off_by_default(config):
+    task, err = build_test_task(_app(config), "TC-1")
+    assert task == "" and "enable_verify" in err
+
+
+def test_build_test_task_unknown_case(config):
+    config.enable_verify = True
+    task, err = build_test_task(_app(config), "TC-nope")
+    assert task == "" and "no test case matching" in err
+
+
+def test_build_test_task_requires_linked_finding(runtime):
+    config = runtime
+    config.enable_verify = True
+    tcid = _seed_test_case(config, finding_id="")
+    task, err = build_test_task(_app(config), tcid)
+    assert task == "" and "not linked to a finding" in err
+
+
+def test_build_test_task_scopes_to_case_and_finding(runtime):
+    config = runtime
+    config.enable_verify = True
+    fid = _seed_finding(config)
+    tcid = _seed_test_case(config, finding_id=fid)
+    task, err = build_test_task(_app(config), tcid)
+    assert err == ""
+    assert fid in task
+    assert "http_request" in task
     assert "record_poc_result" in task

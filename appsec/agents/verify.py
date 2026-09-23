@@ -17,11 +17,14 @@ from __future__ import annotations
 from ..base_agent import AgentSpec, register_agent
 from ..tools.filesystem import read_only_tools
 from ..tools.findings_tool import finding_tools
+from ..tools.http_tool import http_tools
 from ..tools.rag_tool import rag_search_tools
 
 
 def _tools() -> list:
-    tools = read_only_tools() + rag_search_tools() + finding_tools()
+    # http_request lets it exercise a locally-deployed target (loopback + scope
+    # guarded); the sandboxed run_poc is added below when enable_verify is set.
+    tools = read_only_tools() + rag_search_tools() + finding_tools() + http_tools()
     try:
         from ..runtime import require_config
         from ..tools.verify_tool import verify_tools

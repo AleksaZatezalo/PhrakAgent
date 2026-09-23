@@ -215,6 +215,23 @@ def _h_verify(ctx: ChatContext) -> None:
     print()
 
 
+def _h_test(ctx: ChatContext) -> None:
+    from .cli import _land_report
+    from .verify_cmds import build_test_task
+
+    app = ctx.app
+    task, err = build_test_task(app, ctx.rest)
+    if err:
+        phrak_print(err)
+        return
+    print()
+    phrak_print(f"testing {BGREEN}{ctx.rest.strip()}{RESET} against the running app ...\n")
+    out = app.orchestrator.run_agent("verify", task)
+    render_markdown(out)
+    _land_report(app, app.orchestrator.save_agent_report("verify", task, out))
+    print()
+
+
 def _h_poc(ctx: ChatContext) -> None:
     from .poc_cmds import list_pocs, poc_detail
 
@@ -617,6 +634,13 @@ COMMANDS: tuple[Command, ...] = (
         "/testcase-note <id> <text>",
         "record what happened when you ran it",
         _h_testcase_note,
+    ),
+    Command(
+        ("test",),
+        "test cases",
+        "/test <id>",
+        "agentically run a test case vs the app + record a PoC (opt-in)",
+        _h_test,
     ),
     # session
     Command(
