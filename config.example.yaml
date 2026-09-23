@@ -69,7 +69,14 @@ enable_git_clone: false        # expose the guarded git_clone tool to agents
 # and runs a minimal PoC inside a locked-down container to prove
 # exploitability. OFF by default — running attacker payloads is a policy
 # decision, not a technical one. Requires docker or podman on PATH.
+# With enable_verify on you can run it deliberately per finding:
+#   phrak verify FND-284b4aac0d      (or /verify FND-284b4aac0d in chat)
+# The PoC scripts it runs are saved under <workspace>/.phrack/pocs/.
 enable_verify: false
+# Let the DAG planner AUTO-schedule verify inside a full `run`. Off by default
+# even when enable_verify is on, so an assessment never silently runs PoCs —
+# turn it on only if you want every full run to attempt runtime confirmation.
+auto_verify: false
 verify_runtime: auto           # auto | docker | podman
 verify_image: python:3.12-slim # base image; must have python3 + curl
 verify_timeout_s: 30           # per-PoC wall-clock cap
