@@ -199,9 +199,11 @@ def _h_run(ctx: ChatContext) -> None:
 
 
 def _h_scope(ctx: ChatContext) -> None:
+    from .cli import _config_path
     from .scope_cmds import parse_and_apply
 
-    print(parse_and_apply(ctx.app.config, ctx.rest.split()))
+    path = _config_path(ctx.args)
+    print(parse_and_apply(ctx.app.config, ctx.rest.split(), config_path=path))
 
 
 def _h_verify(ctx: ChatContext) -> None:

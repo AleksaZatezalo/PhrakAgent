@@ -7,7 +7,25 @@ Date Created: 09-22-2026
 from __future__ import annotations
 
 from appsec.scope import load_policy, scope_path
-from appsec.scope_cmds import edit_scope, parse_and_apply, render_scope
+from appsec.scope_cmds import (
+    define_scope_interactive,
+    edit_scope,
+    parse_and_apply,
+    render_scope,
+)
+
+
+def _script_answers(monkeypatch, answers):
+    """Feed `define_scope_interactive`'s prompts a fixed list of replies."""
+    it = iter(answers)
+
+    def fake_ask(prompt, default=""):
+        try:
+            return next(it)
+        except StopIteration:
+            return default
+
+    monkeypatch.setattr("appsec.config._ask", fake_ask)
 
 
 def test_render_no_policy(config):
@@ -62,3 +80,41 @@ def test_parse_and_apply_show_and_edit(config):
 
 def test_parse_and_apply_rejects_bad_port(config):
     assert "invalid port" in parse_and_apply(config, ["--allow-port", "nope"])
+
+
+# --------------------------------------------------------------- interactive
+def test_interactive_defines_policy(config, monkeypatch, tmp_path):
+    # enable, hosts, ports, allow-paths, deny-paths, rate, (remote toggle)
+    _script_answers(
+        monkeypatch, ["y", "8.8.8.8", "443", "", "/admin", "30", "y"]
+    )
+    cpath = str(tmp_path / "config.yaml")
+    out = define_scope_interactive(config, config_path=cpath)
+    assert "scope saved" in out
+    p = load_policy(config)
+    assert p.enabled and p.allowed_hosts == ["8.8.8.8"]
+    assert p.allowed_ports == [443] and p.denied_paths == ["/admin"]
+    assert p.rate_limit_per_min == 30
+    # a remote host + "y" flips the config flag and persists it
+    assert config.allow_remote_targets is True
+    assert "allow_remote_targets: true saved" in out
+
+
+def test_interactive_loopback_no_remote_prompt(config, monkeypatch):
+    _script_answers(monkeypatch, ["y", "127.0.0.1", "", "", "", "0"])
+    out = define_scope_interactive(config)
+    assert config.allow_remote_targets is False
+    assert "allow_remote_targets: true saved" not in out
+
+
+def test_bare_scope_runs_wizard(config, monkeypatch):
+    _script_answers(monkeypatch, ["y", "localhost", "", "", "", "0"])
+    out = parse_and_apply(config, [])  # bare /scope
+    assert "scope saved" in out
+    assert load_policy(config).allowed_hosts == ["localhost"]
+
+
+def test_interactive_bad_port_aborts(config, monkeypatch):
+    _script_answers(monkeypatch, ["y", "localhost", "notaport", "", "", "0"])
+    out = define_scope_interactive(config)
+    assert "invalid port" in out and not scope_path(config).exists()

@@ -544,7 +544,7 @@ def cmd_scope(args) -> int:
         cfg.paths.workspace = args.workspace
     cfg.ensure_dirs()
 
-    from .scope_cmds import edit_scope, render_scope
+    from .scope_cmds import define_scope_interactive, edit_scope, render_scope
 
     if not getattr(args, "quiet", False):
         print(mini_banner())
@@ -565,10 +565,13 @@ def cmd_scope(args) -> int:
     has_edits = args.rate is not None or any(
         v for k, v in edits.items() if k != "rate"
     )
-    if has_edits:
+    if args.show:
+        print(render_scope(cfg))
+    elif has_edits:
         print(edit_scope(cfg, **edits))
     else:
-        print(render_scope(cfg))
+        # Bare `phrak scope` walks through defining the whole policy.
+        print(define_scope_interactive(cfg, config_path=path))
     return 0
 
 
@@ -831,8 +834,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_add_testcase)
 
     sp = sub.add_parser(
-        "scope", help="show or edit the target scope policy (no AI)"
+        "scope",
+        help="define the target scope interactively, or show/edit it (no AI)",
     )
+    sp.add_argument("--show", action="store_true", help="print the policy and exit")
     sp.add_argument("--init", action="store_true", help="create a default scope.yaml")
     sp.add_argument("--enable", action="store_true", help="enable the policy")
     sp.add_argument("--disable", action="store_true", help="disable the policy")

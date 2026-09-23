@@ -15,6 +15,15 @@ from .scope import ScopePolicy, SCOPE_FILENAME, load_policy, scope_path
 _LOOPBACK = {"127.0.0.1", "localhost", "::1", "0.0.0.0"}
 
 
+def _split(text: str) -> list[str]:
+    """Split a comma- or space-separated answer into a clean list."""
+    return [x.strip() for x in (text or "").replace(",", " ").split() if x.strip()]
+
+
+def _remote_hosts(hosts: list[str]) -> list[str]:
+    return [h for h in hosts if h.lower() not in _LOOPBACK]
+
+
 def _dedupe(existing: list, incoming) -> list:
     out = list(existing)
     for x in incoming or []:
@@ -88,6 +97,99 @@ def edit_scope(
     return f"scope saved :: {p}\n\n" + render_scope(config)
 
 
+def define_scope_interactive(config, config_path: str | None = None) -> str:
+    """Prompt the user through defining the whole scope policy, then save it.
+
+    Pre-fills from an existing policy. If a remote (non-loopback) host is added
+    and the workspace hasn't opted into remote testing, offers to flip
+    ``allow_remote_targets`` in config so the new scope is actually usable.
+    """
+    from .config import _ask
+
+    existing = load_policy(config) if scope_path(config).exists() else None
+    print("\n  define target scope (Enter keeps the shown default; Ctrl-C cancels)\n")
+    try:
+        enabled = _ask(
+            "  enable policy? (Y/n)", "y" if (existing is None or existing.enabled) else "n"
+        ).lower() not in ("n", "no")
+        hosts = _split(
+            _ask(
+                "  allowed hosts (comma/space; blank = any loopback)",
+                ", ".join(existing.allowed_hosts) if existing else "",
+            )
+        )
+        ports_raw = _split(
+            _ask(
+                "  allowed ports (blank = any)",
+                " ".join(str(x) for x in existing.allowed_ports) if existing else "",
+            )
+        )
+        allow_paths = _split(
+            _ask(
+                "  allowed path prefixes (blank = any)",
+                " ".join(existing.allowed_paths) if existing else "",
+            )
+        )
+        deny_paths = _split(
+            _ask(
+                "  denied path prefixes (blank = none)",
+                " ".join(existing.denied_paths) if existing else "",
+            )
+        )
+        rate = int(
+            _ask(
+                "  rate limit per minute (0 = unlimited)",
+                str(existing.rate_limit_per_min if existing else 0),
+            )
+            or 0
+        )
+    except (EOFError, KeyboardInterrupt):
+        return "\ncancelled — scope not changed."
+
+    ports: list[int] = []
+    for x in ports_raw:
+        try:
+            ports.append(int(x))
+        except ValueError:
+            return f"invalid port: {x!r} — nothing saved."
+
+    policy = ScopePolicy(
+        enabled=enabled,
+        allowed_hosts=[h.lower() for h in hosts],
+        allowed_ports=ports,
+        allowed_paths=allow_paths,
+        denied_paths=deny_paths,
+        rate_limit_per_min=max(0, rate),
+    )
+    p = scope_path(config)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(yaml.safe_dump(policy.to_dict(), sort_keys=False))
+
+    extra = ""
+    remote = _remote_hosts(policy.allowed_hosts)
+    if remote and not getattr(config, "allow_remote_targets", False):
+        try:
+            ans = _ask(
+                f"\n  {', '.join(remote)} is remote — enable allow_remote_targets "
+                "for authorized testing? (y/N)",
+                "n",
+            )
+        except (EOFError, KeyboardInterrupt):
+            ans = "n"
+        if ans.lower() in ("y", "yes"):
+            config.allow_remote_targets = True
+            from .config import default_config_path
+
+            cpath = config_path or str(default_config_path(config.paths.workspace))
+            try:
+                config.save(cpath)
+                extra = f"\nallow_remote_targets: true saved :: {cpath}"
+            except Exception as e:
+                extra = f"\n(could not save allow_remote_targets: {e})"
+
+    return f"scope saved :: {p}\n\n" + render_scope(config) + extra
+
+
 # Flags that mean "edit", so a bare invocation just shows the policy.
 _EDIT_FLAGS = {
     "--init",
@@ -102,9 +204,12 @@ _EDIT_FLAGS = {
 }
 
 
-def parse_and_apply(config, tokens: list[str]) -> str:
-    """Chat entry point: parse `/scope` tokens, then show or edit accordingly."""
-    if not tokens or (len(tokens) == 1 and tokens[0] == "--show"):
+def parse_and_apply(config, tokens: list[str], config_path: str | None = None) -> str:
+    """Chat entry point: bare `/scope` runs the interactive wizard; `--show`
+    prints the policy; flags apply a non-interactive edit."""
+    if not tokens:
+        return define_scope_interactive(config, config_path=config_path)
+    if len(tokens) == 1 and tokens[0] == "--show":
         return render_scope(config)
     if not any(t in _EDIT_FLAGS for t in tokens):
         return "usage: /scope [--init] [--allow-host H] [--allow-port P] "\
