@@ -198,6 +198,12 @@ def _h_run(ctx: ChatContext) -> None:
     print()
 
 
+def _h_scope(ctx: ChatContext) -> None:
+    from .scope_cmds import parse_and_apply
+
+    print(parse_and_apply(ctx.app.config, ctx.rest.split()))
+
+
 def _h_verify(ctx: ChatContext) -> None:
     from .cli import _land_report
     from .verify_cmds import build_verify_task
@@ -678,6 +684,13 @@ COMMANDS: tuple[Command, ...] = (
         "/clone <url> [dest] [--index]",
         "shallow-clone a repo to analyze",
         _h_clone,
+    ),
+    Command(
+        ("scope",),
+        "system",
+        "/scope [--allow-host H …]",
+        "show or edit the target scope policy",
+        _h_scope,
     ),
     Command(
         ("config",),

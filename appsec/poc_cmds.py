@@ -63,6 +63,15 @@ def run_poc(app, ident: str, target: str = "") -> str:
             "in config."
         )
 
+    # Same target policy as every other active tool: loopback by default, a
+    # remote host only if explicitly authorized (allow_remote_targets + scope
+    # allowlist). This gates the *intended* target before the container runs.
+    from .tools.common import guard_local
+
+    target, err = guard_local(target)
+    if err:
+        return err
+
     script = store.read_script(rec)
     if not script:
         return f"PoC {rec.id}'s script file is missing on disk."

@@ -25,8 +25,16 @@ so entries below group work by theme rather than by a released version boundary.
   target with `phrak poc-run POC-… <url>` / `/poc-run` (host exposed to the
   sandbox as `host.docker.internal`, target in `$PHRAK_TARGET`).
 - **`http_request` tool** — the verify/test agent can send HTTP requests to a
-  locally-running target, forced through the loopback + scope guard (never a
-  remote host).
+  target, forced through the loopback + scope guard.
+- **`scope` command** — `phrak scope` (and `/scope`) shows the workspace target
+  scope policy and edits it without hand-writing YAML: `--init`, `--allow-host`,
+  `--remove-host`, `--allow-port`, `--allow-path`, `--deny-path`, `--rate`,
+  `--enable`/`--disable`.
+- **Authorized remote targets** — new `allow_remote_targets` flag (off by
+  default) lets the active tools (`http_request` / `/test` / `poc-run`) reach a
+  non-loopback host **only** when it is explicitly listed in `scope.yaml`'s
+  `allowed_hosts`. For authorized engagements (e.g. an in-scope bug-bounty
+  target); there is no blanket "any host", and loopback-only remains the default.
 - **Agentic test-case execution** — `phrak test <TC-id>` / `/test` drives a
   test case against the running app (via the `http_request` tool), records a PoC,
   and moves the test case's status/result — the live-traffic counterpart of

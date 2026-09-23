@@ -535,6 +535,43 @@ def cmd_add_testcase(args) -> int:
     return 0
 
 
+def cmd_scope(args) -> int:
+    """Show or edit the workspace target-scope policy (no AI, no network)."""
+    path = _config_path(args)
+    _ensure_config(path)
+    cfg = Config.load(path)
+    if args.workspace:
+        cfg.paths.workspace = args.workspace
+    cfg.ensure_dirs()
+
+    from .scope_cmds import edit_scope, render_scope
+
+    if not getattr(args, "quiet", False):
+        print(mini_banner())
+
+    edits = dict(
+        init=args.init,
+        enable=args.enable,
+        disable=args.disable,
+        allow_hosts=args.allow_hosts,
+        remove_hosts=args.remove_hosts,
+        allow_ports=args.allow_ports,
+        allow_paths=args.allow_paths,
+        deny_paths=args.deny_paths,
+        rate=args.rate,
+    )
+    # `--rate 0` is a real edit (unlimited), so check it explicitly rather than
+    # by truthiness.
+    has_edits = args.rate is not None or any(
+        v for k, v in edits.items() if k != "rate"
+    )
+    if has_edits:
+        print(edit_scope(cfg, **edits))
+    else:
+        print(render_scope(cfg))
+    return 0
+
+
 def cmd_verify(args) -> int:
     """Run the sandboxed PoC agent against one finding by id (opt-in)."""
     app = _load_app(args)
@@ -792,6 +829,38 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--preconditions", default="")
     sp.add_argument("--finding", default="", help="finding id this test verifies")
     sp.set_defaults(func=cmd_add_testcase)
+
+    sp = sub.add_parser(
+        "scope", help="show or edit the target scope policy (no AI)"
+    )
+    sp.add_argument("--init", action="store_true", help="create a default scope.yaml")
+    sp.add_argument("--enable", action="store_true", help="enable the policy")
+    sp.add_argument("--disable", action="store_true", help="disable the policy")
+    sp.add_argument(
+        "--allow-host", action="append", dest="allow_hosts", metavar="HOST",
+        help="add a host to allowed_hosts (repeatable)",
+    )
+    sp.add_argument(
+        "--remove-host", action="append", dest="remove_hosts", metavar="HOST",
+        help="remove a host from allowed_hosts (repeatable)",
+    )
+    sp.add_argument(
+        "--allow-port", action="append", dest="allow_ports", type=int, metavar="PORT",
+        help="add a port to allowed_ports (repeatable)",
+    )
+    sp.add_argument(
+        "--allow-path", action="append", dest="allow_paths", metavar="PREFIX",
+        help="add an allowed URL path prefix (repeatable)",
+    )
+    sp.add_argument(
+        "--deny-path", action="append", dest="deny_paths", metavar="PREFIX",
+        help="add a denied URL path prefix (repeatable)",
+    )
+    sp.add_argument(
+        "--rate", type=int, default=None, metavar="N",
+        help="requests/min to the target (0 = unlimited)",
+    )
+    sp.set_defaults(func=cmd_scope)
 
     sp = sub.add_parser(
         "verify",

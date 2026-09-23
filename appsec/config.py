@@ -250,6 +250,12 @@ class Config:
     # service (`phrak poc-run <id>` / `/poc-run <id>`). Empty -> pass a URL on
     # the command line. A loopback URL is auto-rewritten to reach the host.
     verify_target: str = ""
+    # Off by default: PHRAK only ever drives a locally-running instance. Turn on
+    # ONLY for an authorized engagement (e.g. an in-scope bug-bounty target).
+    # Even then, a remote host is reachable ONLY if the workspace scope policy
+    # (.phrack/scope.yaml) is enabled AND names it in allowed_hosts — there is no
+    # blanket "allow any remote host". See tools/common.guard_local.
+    allow_remote_targets: bool = False
     orchestrator: OrchestratorConfig = field(default_factory=OrchestratorConfig)
     analyzers: AnalyzersConfig = field(default_factory=AnalyzersConfig)
     # Per-agent LLM overrides, e.g. {"threat_model": {"model": "glm-4.7-flash"}}.
@@ -297,6 +303,7 @@ class Config:
             verify_memory_mb=int(raw.get("verify_memory_mb", 512)),
             verify_pids=int(raw.get("verify_pids", 128)),
             verify_target=str(raw.get("verify_target", "")),
+            allow_remote_targets=bool(raw.get("allow_remote_targets", False)),
             agent_models=dict(raw.get("agent_models") or {}),
         )
 
@@ -406,6 +413,7 @@ class Config:
             "verify_memory_mb": self.verify_memory_mb,
             "verify_pids": self.verify_pids,
             "verify_target": self.verify_target,
+            "allow_remote_targets": self.allow_remote_targets,
             "agent_models": self.agent_models,
         }
 

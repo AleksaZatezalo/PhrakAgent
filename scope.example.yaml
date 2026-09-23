@@ -1,14 +1,20 @@
 # Example scope / target policy. Copy to <workspace>/.phrack/scope.yaml to make
-# "what am I allowed to touch" declarative and auditable. This can ONLY narrow
-# what is already permitted — the loopback-only floor is always enforced first
-# and is never weakened by anything here. A missing file means "no extra limits"
-# (loopback-only still applies).
+# "what am I allowed to touch" declarative and auditable. By default this can
+# ONLY narrow what is already permitted — the loopback-only floor is enforced
+# first. A missing file means "no extra limits" (loopback-only still applies).
+#
+# REMOTE TARGETS (authorized engagements only): to let PHRAK's active tools reach
+# a non-loopback host — e.g. an in-scope bug-bounty target — you must BOTH set
+# `allow_remote_targets: true` in config AND list that exact host below. An empty
+# allowed_hosts NEVER authorizes a remote host; there is no blanket "any host".
+# Only add hosts you are authorized to test, and mind the program's rules.
 
 enabled: true                 # a present file defaults to enabled
 
-allowed_hosts:                # empty = any loopback host
+allowed_hosts:                # empty = any loopback host (remote hosts must be listed)
   - 127.0.0.1
   - localhost
+  # - target.example.com     # a remote host, only with allow_remote_targets: true
 
 allowed_ports:                # empty = any port
   - 5000

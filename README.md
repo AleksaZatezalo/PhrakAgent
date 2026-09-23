@@ -230,6 +230,8 @@ phrak verify FND-284b4aac0d -w ./target       # sandboxed PoC for one finding (o
 phrak test TC-1a2b3c -w ./target              # agentically run a test case vs the app (opt-in)
 phrak poc -w ./target                         # list PoCs; `phrak poc POC-…` shows one
 phrak poc-run POC-1a2b3c http://localhost:8000 -w ./target  # replay a PoC vs a live target
+phrak scope -w ./target                       # show the target scope policy
+phrak scope --allow-host target.example.com --allow-port 443 -w ./target  # edit it (no AI)
 phrak testcases -w ./target            # the manual test plan, as a checklist
 phrak add-testcase -w ./target         # write a test case by hand (no AI)
 phrak report -w ./target               # assemble the whole engagement
@@ -282,6 +284,7 @@ immediately; files outside the workspace are never inlined.
 | `/cost` | Tokens used and estimated spend this session |
 | `/verbose` | Toggle full tool output vs. one-line summaries |
 | `/clone <url> [dest] [--index]` | Shallow-clone a repo to analyze |
+| `/scope [--allow-host H …]` | Show or edit the target scope policy |
 | `/config [--show]` | Re-run the setup wizard (or print the redacted config) |
 | `/help`, `/quit` | Grouped command list; exit |
 
@@ -381,9 +384,52 @@ that finding on the runtime track.
 
 **The `http_request` tool.** The verify/test agent can send HTTP requests to the
 running target via a built-in `http_request` tool. It is forced through PHRAK's
-scope guard: the URL **must** resolve to loopback (localhost / 127.0.0.1 / ::1)
-and pass the workspace scope policy (`scope.yaml` — allowed hosts/ports/paths +
-rate limit). It cannot reach the public internet or an arbitrary host.
+scope guard: by default the URL **must** resolve to loopback (localhost /
+127.0.0.1 / ::1) and pass the workspace scope policy (`scope.yaml` — allowed
+hosts/ports/paths + rate limit). It cannot reach an arbitrary host.
+
+### Testing an authorized remote target (e.g. a bug-bounty program)
+
+PHRAK is loopback-first on purpose. To point the active tools (`http_request`,
+`/test`, `poc-run`) at a **remote host you are authorized to test**, you must
+*explicitly* opt in on two levels — there is no blanket "any host":
+
+1. `allow_remote_targets: true` in config, **and**
+2. a `.phrack/scope.yaml` that is `enabled: true` and lists the exact host in
+   `allowed_hosts` (add `allowed_ports` / `allowed_paths` / `denied_paths` and a
+   `rate_limit_per_min` to stay within the program's rules).
+
+```yaml
+# .phrack/config.yaml
+allow_remote_targets: true        # authorized engagements only
+```
+Set the scope with the `phrak scope` command (no hand-editing YAML):
+
+```bash
+phrak scope --init \
+  --allow-host target.example.com --allow-port 443 \
+  --deny-path /admin --rate 30          # keep out of excluded paths; throttle
+phrak scope                              # show the current policy   (/scope in chat)
+```
+
+…which writes the equivalent `.phrack/scope.yaml`:
+
+```yaml
+enabled: true
+allowed_hosts: [target.example.com]
+allowed_ports: [443]
+denied_paths: [/admin]            # keep out of anything the program excludes
+rate_limit_per_min: 30
+```
+
+With that in place, the same commands work against the in-scope host:
+`/verify` and `/test` drive it via `http_request`, and
+`phrak poc-run POC-… https://target.example.com` replays a saved PoC against it
+(the target URL is re-checked against the allowlist before the sandbox runs). An
+empty `allowed_hosts`, a disabled scope, or a host you didn't list is still
+refused. **Only enable this for hosts you are authorized to test, and keep PoCs
+non-destructive and within the program's rules — you are hitting real
+infrastructure.**
 
 ## Bring in a codebase (`phrak clone`)
 

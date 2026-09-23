@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..runtime import require_config
+from ..scope import SCOPE_FILENAME
 
 # Output caps (bytes/chars) — named by purpose rather than repeated magic numbers.
 FILE_READ_MAX = 60_000  # a single file read
@@ -217,18 +218,26 @@ def is_local(url: str) -> bool:
 
 
 def guard_local(url: str, binary: str | None = None) -> tuple[str, str | None]:
-    """Normalise ``url`` and enforce loopback (and optionally that ``binary`` exists).
+    """Normalise ``url`` and enforce the target policy (and optionally ``binary``).
 
     Returns ``(normalized_url, error)``. When ``error`` is not None the caller
-    should return it to the agent unchanged. The loopback floor is checked first
-    and unconditionally; the declarative scope policy can only *further* narrow it
-    (allowed hosts/ports/paths + rate limit).
+    should return it to the agent unchanged.
+
+    Loopback is the default floor and is checked first. A NON-loopback host is
+    refused unless the workspace has *explicitly* opted into remote testing:
+    ``allow_remote_targets: true`` in config AND the scope policy enabled with the
+    host named in ``allowed_hosts`` (see :func:`_remote_target_allowed`). This is
+    the authorized-engagement escape hatch — there is no blanket "any host". The
+    scope policy still further narrows either way (ports/paths + rate limit).
     """
     url = normalize_url(url)
-    if not is_local(url):
+    if not is_local(url) and not _remote_target_allowed(url):
         return url, (
-            f"[REFUSED] '{url}' is not a loopback address. PHRAK only targets a "
-            "locally-running instance (localhost / 127.0.0.1 / ::1)."
+            f"[REFUSED] '{url}' is not a loopback address, and it is not an "
+            "authorized remote target. PHRAK targets a locally-running instance "
+            "by default. To test an in-scope remote host (e.g. a bug-bounty "
+            "target), set `allow_remote_targets: true` and add the host to "
+            f"`allowed_hosts` in {SCOPE_FILENAME}."
         )
     if binary and not shutil.which(binary):
         return url, (
@@ -239,6 +248,29 @@ def guard_local(url: str, binary: str | None = None) -> tuple[str, str | None]:
     if scope_err:
         return url, scope_err
     return url, None
+
+
+def _remote_target_allowed(url: str) -> bool:
+    """True only for an explicitly-authorized remote target.
+
+    Requires BOTH ``allow_remote_targets`` in config AND a scope policy that is
+    enabled and names this host in ``allowed_hosts`` — an empty/absent allowlist
+    never authorizes a remote host. Fails closed on any error (no config, etc.).
+    """
+    try:
+        from ..runtime import require_config
+        from ..scope import load_policy
+
+        cfg = require_config()
+        if not getattr(cfg, "allow_remote_targets", False):
+            return False
+        policy = load_policy(cfg)
+        if not policy.enabled or not policy.allowed_hosts:
+            return False
+        host = (urlparse(url).hostname or "").lower()
+        return host in policy.allowed_hosts
+    except Exception:
+        return False
 
 
 def _enforce_scope(url: str, host_port_only: bool = False) -> str | None:

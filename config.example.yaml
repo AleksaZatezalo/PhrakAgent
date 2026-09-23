@@ -83,6 +83,12 @@ verify_timeout_s: 30           # per-PoC wall-clock cap
 verify_network: none           # none (default) | bridge — none blocks outbound
 verify_memory_mb: 512
 verify_pids: 128
+# Off by default: PHRAK only drives a locally-running instance. Turn on ONLY for
+# an authorized engagement (e.g. an in-scope bug-bounty target). Even then, a
+# remote host is reachable only if .phrack/scope.yaml is enabled AND lists it in
+# allowed_hosts — there is no blanket "any remote host".
+allow_remote_targets: false
+# verify_target: ""            # default URL for poc-run (e.g. http://localhost:8000)
 
 # Per-agent model overrides. Any subset of the llm: fields above. Agents not
 # listed use the base llm: config.
