@@ -221,6 +221,7 @@ phrak ask "how are sessions authenticated?" -w ./target       # RAG over the cod
 phrak index -w ./target                # build/refresh the code index (no AI)
 phrak index --stats -w ./target        # what's indexed, what's pending
 phrak agents                           # list agents (and the model each uses)
+phrak benchmark                        # compare models on a labeled target (recall/precision/tokens)
 phrak findings -w ./target             # every finding recorded so far
 phrak findings --severity high --resurfaced -w ./target   # filter the backlog
 phrak findings FND-284b4aac0d -w ./target                 # one finding in full
@@ -253,6 +254,7 @@ immediately; files outside the workspace are never inlined.
 | `/index [--rebuild\|--stats]` | Build or refresh the code index — no AI |
 | `/run <text>` | Full multi-agent assessment + saved report |
 | `/route <text>` | Auto-route to the single best-fit agent |
+| `/benchmark` | Compare models on the labeled target (recall/precision/tokens) |
 | `/code_review`, `/threat_model`, `/test_case` `<text>` | Run one agent directly |
 | `/agents [--verbose]` | List agents (with `--verbose`, their tools too) |
 | `/generate_report` | Assemble the whole engagement into one report |
@@ -277,6 +279,39 @@ immediately; files outside the workspace are never inlined.
 
 Every `/run`, `/route`, and single-agent invocation saves and indexes its report
 exactly like the equivalent CLI command.
+
+## Benchmark models (`phrak benchmark`)
+
+Not sure which model to point PHRAK at? `phrak benchmark` (or `/benchmark` in
+chat) runs one or more provider/model combinations against a **known-vulnerable
+target with labeled ground truth** and prints a comparison table of **recall,
+precision, and token cost** — so the choice is measured, not guessed.
+
+It's interactive by default: it asks for the provider, the model, and (for a
+cloud provider with no key on hand) the API key, then lets you add more models to
+compare before running.
+
+```bash
+phrak benchmark                        # interactive: pick providers/models to compare
+phrak benchmark --provider ollama  --model qwen2.5-coder:7b \
+                --provider anthropic --model claude-opus-5   # non-interactive (CI)
+phrak --json benchmark --provider ollama --model llama3.1    # machine-readable rows
+```
+
+```
+benchmark · target vuln_app.py · 4 labeled vuln(s) · deterministic analyzers off
+
+model                      recall  prec  F1    TP/FP/FN  in-tok  out-tok  calls  time
+------------------------------------------------------------------------------------
+anthropic:claude-opus-5    100%    100%  1.00  4/0/0     8123    1902     11     41.2s
+ollama:qwen2.5-coder:7b    75%     60%   0.67  3/2/1     0       0        18     1m38s
+```
+
+Each model runs in an **isolated throwaway workspace** — nothing lands in your
+real `.phrack/`. The deterministic analyzers (Opengrep, dependency audit) are
+turned **off** for the run so the scores reflect the *model's* reasoning rather
+than the static scanner every model would share. A cloud key you enter is used
+for the session and only persisted to `.phrack/credentials` if you say so.
 
 ## Bring in a codebase (`phrak clone`)
 
