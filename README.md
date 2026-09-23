@@ -226,6 +226,10 @@ phrak findings -w ./target             # every finding recorded so far
 phrak findings --severity high --resurfaced -w ./target   # filter the backlog
 phrak findings FND-284b4aac0d -w ./target                 # one finding in full
 phrak add-finding -w ./target          # record one you verified yourself (no AI)
+phrak verify FND-284b4aac0d -w ./target       # sandboxed PoC for one finding (opt-in)
+phrak test TC-1a2b3c -w ./target              # agentically run a test case vs the app (opt-in)
+phrak poc -w ./target                         # list PoCs; `phrak poc POC-…` shows one
+phrak poc-run POC-1a2b3c http://localhost:8000 -w ./target  # replay a PoC vs a live target
 phrak testcases -w ./target            # the manual test plan, as a checklist
 phrak add-testcase -w ./target         # write a test case by hand (no AI)
 phrak report -w ./target               # assemble the whole engagement
@@ -263,8 +267,12 @@ immediately; files outside the workspace are never inlined.
 | `/finding-add` | Record a finding **you** verified — prompts, no AI |
 | `/triage <id> <status> [note]` | Record your verdict on a finding |
 | `/note <id> <text>` | Attach a reviewer note |
+| `/verify <FND-id>` | Sandboxed PoC for one finding (opt-in: `enable_verify`) |
+| `/poc [POC-id]` | List recorded PoCs, or show one in full |
+| `/poc-run <POC-id> [url]` | Replay a saved PoC against a locally deployed target (opt-in) |
 | `/testcases [filters]` | The test-case backlog as a checklist |
 | `/testcase <id>` | One test case in full |
+| `/test <TC-id>` | Agentically run a test case vs the running app + record a PoC (opt-in) |
 | `/testcase-add` | Write a test case by hand — prompts, no AI |
 | `/testcase-status <id> <s>` | `new` / `in_progress` / `complete` (+ optional result) |
 | `/testcase-link <id> <FND-…>` | Tie a test to the finding it verifies |
@@ -312,6 +320,68 @@ real `.phrack/`. The deterministic analyzers (Opengrep, dependency audit) are
 turned **off** for the run so the scores reflect the *model's* reasoning rather
 than the static scanner every model would share. A cloud key you enter is used
 for the session and only persisted to `.phrack/credentials` if you say so.
+
+## Verify & prove findings (opt-in)
+
+Static analysis surfaces *leads*. To promote a lead to a runtime-confirmed
+finding, PHRAK ships an opt-in `verify` agent that runs a minimal proof-of-concept
+inside a **locked-down container** (`--network none`, read-only root, dropped
+caps, `nobody` user, memory/PID caps, wall-clock kill). It's **off by default** —
+running attacker code is a policy decision. Enable it in config:
+
+```yaml
+enable_verify: true      # register the verify agent + sandbox (needs docker/podman)
+auto_verify: false       # keep OFF: don't let a full `run` auto-schedule PoCs
+verify_target: ""        # default URL for poc-run, e.g. http://localhost:8000
+```
+
+Note the two switches. `enable_verify` makes the agent *available* to run
+deliberately; `auto_verify` (separate, off by default) is the only thing that
+lets the DAG planner schedule verify inside a full `phrak run`. So enabling
+verification never means an assessment silently starts executing PoCs.
+
+**Verify one finding:**
+
+```bash
+phrak verify FND-284b4aac0d          # or /verify FND-284b4aac0d in chat
+```
+
+The agent reads the source & sink, writes a short PoC, runs it in the sandbox,
+and records the verdict on the finding's *runtime* status track (`confirmed`,
+`false_positive`, or `inconclusive`). A human `/triage` decision still outranks it.
+
+**Where PoCs are stored.** Every PoC the agent runs is saved to
+`<workspace>/.phrack/pocs/` (script files) with an index (`index.jsonl`), each
+assigned a `POC-…` id. Browse and replay them:
+
+```bash
+phrak poc                                  # list every recorded PoC   (/poc)
+phrak poc POC-1a2b3c4d5e                    # show one in full          (/poc POC-…)
+phrak poc-run POC-1a2b3c4d5e http://localhost:8000   # replay it        (/poc-run …)
+```
+
+`poc-run` re-executes a saved PoC against a **locally deployed** instance of the
+target: the host is exposed to the sandbox as `host.docker.internal` and the URL
+is handed to the PoC in `$PHRAK_TARGET` (a loopback URL is rewritten
+automatically). You are hitting a real running service — keep PoCs safe and
+non-destructive.
+
+**Agentically test a test case (`/test`).** `/test <TC-id>` (or `phrak test`)
+takes a test case, exercises the running app to prove or disprove the finding it
+verifies, and records a PoC — the live-traffic counterpart of `/verify`:
+
+```bash
+phrak test TC-1a2b3c                  # or /test TC-1a2b3c in chat
+```
+
+The test case must be linked to a finding (`/testcase-link`). The agent uses the
+`http_request` tool to drive the target.
+
+**The `http_request` tool.** The verify/test agent can send HTTP requests to the
+running target via a built-in `http_request` tool. It is forced through PHRAK's
+scope guard: the URL **must** resolve to loopback (localhost / 127.0.0.1 / ::1)
+and pass the workspace scope policy (`scope.yaml` — allowed hosts/ports/paths +
+rate limit). It cannot reach the public internet or an arbitrary host.
 
 ## Bring in a codebase (`phrak clone`)
 

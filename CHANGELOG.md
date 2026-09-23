@@ -13,6 +13,23 @@ so entries below group work by theme rather than by a released version boundary.
 
 ### Added
 
+- **Verify one finding on demand** — `phrak verify <FND-id>` (and `/verify` in
+  chat) runs the sandboxed PoC agent against a single finding by id and records
+  its runtime verdict. New `auto_verify` config flag (off by default) decouples
+  "verify agent available" (`enable_verify`) from "let a full `run`
+  auto-schedule PoCs" — so enabling verification never makes an assessment
+  silently execute attacker code.
+- **PoC store + replay** — every PoC the verify agent runs is saved to
+  `.phrack/pocs/` with a `POC-…` id and index. Browse with `phrak poc` /
+  `/poc`, inspect with `phrak poc POC-…`, and replay against a locally deployed
+  target with `phrak poc-run POC-… <url>` / `/poc-run` (host exposed to the
+  sandbox as `host.docker.internal`, target in `$PHRAK_TARGET`).
+- **`http_request` tool** — the verify/test agent can send HTTP requests to a
+  locally-running target, forced through the loopback + scope guard (never a
+  remote host).
+- **Agentic test-case execution** — `phrak test <TC-id>` / `/test` drives a
+  test case against the running app to prove or disprove the finding it verifies,
+  recording a PoC — the live-traffic counterpart of `verify`.
 - **Model benchmark** — `phrak benchmark` (and `/benchmark` in chat) runs one or
   more provider/model combinations against a labeled vulnerable target and prints
   a comparison table of recall, precision, and token cost. Interactive by default

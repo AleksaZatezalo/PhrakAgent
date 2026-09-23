@@ -13,7 +13,8 @@ import pytest
 from appsec.models.findings import FindingEvidence, SecurityFinding
 from appsec.models.testcases import SecurityTestCase
 from appsec.poc_store import PocStore
-from appsec.store import FindingStore, TestCaseStore
+from appsec.store import FindingStore
+from appsec.store import TestCaseStore as _TCStore
 from appsec.tools.verify_tool import record_poc_result
 from appsec.verify_cmds import build_test_task, build_verify_task
 
@@ -109,7 +110,7 @@ def _seed_test_case(config, finding_id="") -> str:
         severity="high",
         finding_id=finding_id,
     )
-    return TestCaseStore(config).upsert([tc])[0].id
+    return _TCStore(config).upsert([tc])[0].id
 
 
 def test_build_test_task_off_by_default(config):
