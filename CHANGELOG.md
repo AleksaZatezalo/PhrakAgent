@@ -28,8 +28,10 @@ so entries below group work by theme rather than by a released version boundary.
   locally-running target, forced through the loopback + scope guard (never a
   remote host).
 - **Agentic test-case execution** — `phrak test <TC-id>` / `/test` drives a
-  test case against the running app to prove or disprove the finding it verifies,
-  recording a PoC — the live-traffic counterpart of `verify`.
+  test case against the running app (via the `http_request` tool), records a PoC,
+  and moves the test case's status/result — the live-traffic counterpart of
+  `verify`. Works for linked and unlinked test cases; a linked case also promotes
+  its finding on the runtime track.
 - **Model benchmark** — `phrak benchmark` (and `/benchmark` in chat) runs one or
   more provider/model combinations against a labeled vulnerable target and prints
   a comparison table of recall, precision, and token cost. Interactive by default
