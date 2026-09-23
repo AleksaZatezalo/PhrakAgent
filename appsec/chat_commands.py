@@ -690,8 +690,8 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         ("scope",),
         "system",
-        "/scope [--allow-host H …]",
-        "show or edit the target scope policy",
+        "/scope",
+        "define the target scope interactively (--show / flags to edit)",
         _h_scope,
     ),
     Command(

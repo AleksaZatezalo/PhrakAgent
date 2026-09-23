@@ -71,7 +71,7 @@ def test_remote_host_hint_without_flag(config):
 
 
 def test_parse_and_apply_show_and_edit(config):
-    assert "no scope policy" in parse_and_apply(config, [])
+    assert "no scope policy" in parse_and_apply(config, ["--show"])
     out = parse_and_apply(config, ["--allow-host", "x.com", "--rate", "10"])
     assert "scope saved" in out
     p = load_policy(config)

@@ -230,8 +230,9 @@ phrak verify FND-284b4aac0d -w ./target       # sandboxed PoC for one finding (o
 phrak test TC-1a2b3c -w ./target              # agentically run a test case vs the app (opt-in)
 phrak poc -w ./target                         # list PoCs; `phrak poc POC-…` shows one
 phrak poc-run POC-1a2b3c http://localhost:8000 -w ./target  # replay a PoC vs a live target
-phrak scope -w ./target                       # show the target scope policy
-phrak scope --allow-host target.example.com --allow-port 443 -w ./target  # edit it (no AI)
+phrak scope -w ./target                       # define the target scope interactively
+phrak scope --show -w ./target                # print the current policy
+phrak scope --allow-host target.example.com --allow-port 443 -w ./target  # non-interactive edit
 phrak testcases -w ./target            # the manual test plan, as a checklist
 phrak add-testcase -w ./target         # write a test case by hand (no AI)
 phrak report -w ./target               # assemble the whole engagement
@@ -284,7 +285,7 @@ immediately; files outside the workspace are never inlined.
 | `/cost` | Tokens used and estimated spend this session |
 | `/verbose` | Toggle full tool output vs. one-line summaries |
 | `/clone <url> [dest] [--index]` | Shallow-clone a repo to analyze |
-| `/scope [--allow-host H …]` | Show or edit the target scope policy |
+| `/scope` | Define the target scope interactively (`--show` / flags to edit) |
 | `/config [--show]` | Re-run the setup wizard (or print the redacted config) |
 | `/help`, `/quit` | Grouped command list; exit |
 
@@ -403,13 +404,17 @@ PHRAK is loopback-first on purpose. To point the active tools (`http_request`,
 # .phrack/config.yaml
 allow_remote_targets: true        # authorized engagements only
 ```
-Set the scope with the `phrak scope` command (no hand-editing YAML):
+Set the scope with the `phrak scope` command (no hand-editing YAML). Bare
+`phrak scope` (or `/scope` in chat) walks you through it interactively — and when
+you enter a remote host it offers to flip `allow_remote_targets` for you:
 
 ```bash
+phrak scope                              # interactive wizard (asks hosts/ports/paths/rate)
+phrak scope --show                       # print the current policy
+# …or set it non-interactively:
 phrak scope --init \
   --allow-host target.example.com --allow-port 443 \
   --deny-path /admin --rate 30          # keep out of excluded paths; throttle
-phrak scope                              # show the current policy   (/scope in chat)
 ```
 
 …which writes the equivalent `.phrack/scope.yaml`:

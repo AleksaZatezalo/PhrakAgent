@@ -26,10 +26,12 @@ so entries below group work by theme rather than by a released version boundary.
   sandbox as `host.docker.internal`, target in `$PHRAK_TARGET`).
 - **`http_request` tool** — the verify/test agent can send HTTP requests to a
   target, forced through the loopback + scope guard.
-- **`scope` command** — `phrak scope` (and `/scope`) shows the workspace target
-  scope policy and edits it without hand-writing YAML: `--init`, `--allow-host`,
+- **`scope` command** — bare `phrak scope` (or `/scope`) defines the workspace
+  target scope policy **interactively** (prompts for hosts/ports/paths/rate, and
+  offers to enable `allow_remote_targets` when you add a remote host). `--show`
+  prints it; flags edit it non-interactively (`--init`, `--allow-host`,
   `--remove-host`, `--allow-port`, `--allow-path`, `--deny-path`, `--rate`,
-  `--enable`/`--disable`.
+  `--enable`/`--disable`).
 - **Authorized remote targets** — new `allow_remote_targets` flag (off by
   default) lets the active tools (`http_request` / `/test` / `poc-run`) reach a
   non-loopback host **only** when it is explicitly listed in `scope.yaml`'s
