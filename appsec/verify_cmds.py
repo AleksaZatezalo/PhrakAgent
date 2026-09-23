@@ -77,30 +77,41 @@ def build_test_task(app, ident: str) -> tuple[str, str]:
     tc = TestCaseStore(cfg).get(ident)
     if tc is None:
         return "", f"no test case matching '{ident}'. Run `phrak testcases` to list them."
-    if not tc.finding_id:
-        return "", (
-            f"test case {tc.id} is not linked to a finding. Link it first with "
-            f"`/testcase-link {tc.id} <FND-id>`, then run test again."
+
+    # A linked finding is preferred (its runtime status gets promoted too), but an
+    # unlinked test case is still runnable — the PoC is just keyed by the case id.
+    if tc.finding_id:
+        finding = FindingStore(cfg).get(tc.finding_id)
+        finding_block = (
+            f"Finding under test ({tc.finding_id}):\n"
+            + (
+                render_finding_detail(finding)
+                if finding is not None
+                else f"(finding {tc.finding_id} not found in the store)"
+            )
         )
-    finding = FindingStore(cfg).get(tc.finding_id)
-    finding_block = (
-        render_finding_detail(finding)
-        if finding is not None
-        else f"(finding {tc.finding_id} not found in the store)"
-    )
+        subject = f"prove or disprove the finding it verifies ({tc.finding_id})"
+    else:
+        finding_block = (
+            "This test case is not linked to a finding — judge it purely on its "
+            "own expected result."
+        )
+        subject = "prove or disprove the issue it describes"
 
     task = (
         f"Agentically EXECUTE the test case below against the locally-deployed "
-        f"target and prove or disprove the finding it verifies ({tc.finding_id}). "
+        f"target and {subject}. "
         "Use http_request to send the requests the test case describes to the "
         "running app (loopback only), read the responses, and judge them against "
         "the test case's expected result. Then write a minimal, SAFE, "
         "non-destructive PoC (python or sh) that reproduces the check and, if the "
         "sandbox is available, confirm it with run_poc. Record the verdict with "
-        f"record_poc_result using the finding id {tc.finding_id} — confirmed if "
-        "the issue reproduced, false_positive if it did not, inconclusive if it "
-        "needs setup you don't have. Do NOT perform destructive actions.\n\n"
+        f"record_test_result using the test case id {tc.id} — confirmed if the "
+        "issue reproduced, false_positive if it did not, inconclusive if it needs "
+        "setup you don't have. (record_test_result saves the PoC and, when the "
+        "case is linked to a finding, promotes that finding too.) Do NOT perform "
+        "destructive actions.\n\n"
         f"Test case:\n{tc.to_markdown()}\n\n"
-        f"Finding under test:\n{finding_block}"
+        f"{finding_block}"
     )
     return task, ""

@@ -374,8 +374,10 @@ verifies, and records a PoC — the live-traffic counterpart of `/verify`:
 phrak test TC-1a2b3c                  # or /test TC-1a2b3c in chat
 ```
 
-The test case must be linked to a finding (`/testcase-link`). The agent uses the
-`http_request` tool to drive the target.
+It works whether or not the test case is linked to a finding: the agent uses the
+`http_request` tool to drive the target, saves a PoC, and moves the test case's
+status/result. When the case **is** linked (`/testcase-link`), it also promotes
+that finding on the runtime track.
 
 **The `http_request` tool.** The verify/test agent can send HTTP requests to the
 running target via a built-in `http_request` tool. It is forced through PHRAK's

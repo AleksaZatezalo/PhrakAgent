@@ -315,6 +315,91 @@ def _poc_tail(poc: str) -> str:
     return f"(poc: {first}…)" if len(poc) > 80 else f"(poc: {first})"
 
 
+# Verification outcome (agent vocabulary) -> (test-case status, test-case result).
+# See models.testcases: statuses new|in_progress|complete, results pass|fail|
+# blocked|inconclusive. "fail" = the security control failed (issue present).
+_TEST_OUTCOME = {
+    "confirmed": ("complete", "fail"),
+    "false_positive": ("complete", "pass"),
+    "inconclusive": ("in_progress", "inconclusive"),
+}
+# Friendly aliases the model might use.
+_OUTCOME_ALIASES = {
+    "vulnerable": "confirmed",
+    "pass": "false_positive",  # app "passed" the security test -> not vulnerable
+    "not_vulnerable": "false_positive",
+    "safe": "false_positive",
+    "fail": "confirmed",  # security control "failed" -> vulnerable
+}
+
+
+@tool
+def record_test_result(
+    test_case_id: str,
+    outcome: str,
+    note: str = "",
+    poc: str = "",
+) -> str:
+    """Record the result of running a TEST CASE against the app, saving its PoC.
+
+    Use this from `/test` once you've exercised the test case with http_request
+    (and, where useful, run_poc). Works whether or not the test case is linked to
+    a finding: it always saves the ``poc`` to the PoC store and moves the test
+    case's status/result, and if the case IS linked to a finding it also promotes
+    that finding on the runtime track (like record_poc_result).
+
+    ``outcome`` is one of ``confirmed`` (issue reproduced), ``false_positive``
+    (not reproducible), or ``inconclusive`` (needs setup you don't have).
+    ``note`` explains what you observed; ``poc`` is the script you ran."""
+    outcome = _OUTCOME_ALIASES.get(
+        (outcome or "").strip().lower(), (outcome or "").strip().lower()
+    )
+    if outcome not in _TEST_OUTCOME:
+        return (
+            f"REJECTED: outcome {outcome!r} is not one of confirmed / "
+            "false_positive / inconclusive."
+        )
+    from ..poc_store import PocStore
+    from ..store import FindingStore, TestCaseStore
+
+    cfg = require_config()
+    tc = TestCaseStore(cfg).get(test_case_id)
+    if tc is None:
+        return (
+            f"NOT RECORDED — no test case matching {test_case_id!r}. "
+            "Use the test case id shown in your context."
+        )
+
+    # Save the PoC keyed by the linked finding when there is one, else the test
+    # case id — so an unlinked case still produces a browsable POC-… entry.
+    poc_rec = PocStore(cfg).save(
+        tc.finding_id or tc.id, poc, outcome=outcome, note=note
+    )
+    where = f"(poc {poc_rec.id})" if poc_rec else ""
+    detail = " ".join(p for p in (note.strip(), _poc_tail(poc), where) if p).strip()
+
+    status, result = _TEST_OUTCOME[outcome]
+    _, tc_msg = TestCaseStore(cfg).set_status(tc.id, status, result=result)
+    if detail:
+        TestCaseStore(cfg).add_note(tc.id, f"/test run: {detail}")
+
+    # Linked to a finding? Promote it on the runtime track too.
+    finding_msg = ""
+    if tc.finding_id and outcome in _OUTCOME_STATUS:
+        conf = 0.95 if outcome == "confirmed" else None
+        rec, fmsg = FindingStore(cfg).set_status(
+            tc.finding_id,
+            _OUTCOME_STATUS[outcome],
+            actor="runtime",
+            note=f"/test PoC: {detail or outcome}",
+            confidence=conf,
+        )
+        if rec is not None:
+            finding_msg = f" · finding {rec.id} -> {_OUTCOME_STATUS[outcome]}"
+
+    return f"RECORDED — {tc_msg}{finding_msg}. {where}".strip()
+
+
 @tool
 def run_poc(script: str, kind: str = "python", mount_workspace: bool = False) -> str:
     """Run a short PoC script inside a locked-down container to verify a finding.
@@ -337,4 +422,4 @@ def verify_tools(config) -> list:
     """Only exposed when enable_verify is set. Off-by-default posture."""
     if not getattr(config, "enable_verify", False):
         return []
-    return [run_poc, record_poc_result]
+    return [run_poc, record_poc_result, record_test_result]

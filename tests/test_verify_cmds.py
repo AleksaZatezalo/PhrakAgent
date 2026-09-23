@@ -124,12 +124,15 @@ def test_build_test_task_unknown_case(config):
     assert task == "" and "no test case matching" in err
 
 
-def test_build_test_task_requires_linked_finding(runtime):
+def test_build_test_task_handles_unlinked_case(runtime):
     config = runtime
     config.enable_verify = True
     tcid = _seed_test_case(config, finding_id="")
     task, err = build_test_task(_app(config), tcid)
-    assert task == "" and "not linked to a finding" in err
+    assert err == ""  # unlinked is now runnable
+    assert tcid in task
+    assert "record_test_result" in task
+    assert "not linked to a finding" in task
 
 
 def test_build_test_task_scopes_to_case_and_finding(runtime):
@@ -139,6 +142,46 @@ def test_build_test_task_scopes_to_case_and_finding(runtime):
     tcid = _seed_test_case(config, finding_id=fid)
     task, err = build_test_task(_app(config), tcid)
     assert err == ""
-    assert fid in task
+    assert fid in task and tcid in task
     assert "http_request" in task
-    assert "record_poc_result" in task
+    assert "record_test_result" in task
+
+
+# ------------------------------------------- record_test_result (linked/unlinked)
+def test_record_test_result_unlinked_saves_poc_and_completes(runtime):
+    from appsec.tools.verify_tool import record_test_result
+
+    config = runtime
+    tcid = _seed_test_case(config, finding_id="")
+    msg = record_test_result.invoke(
+        {"test_case_id": tcid, "outcome": "confirmed", "poc": "print('boom')"}
+    )
+    assert "RECORDED" in msg and "poc POC-" in msg
+    tc = _TCStore(config).get(tcid)
+    assert tc.status == "complete" and tc.result == "fail"
+    pocs = PocStore(config).list()
+    assert len(pocs) == 1 and pocs[0].finding_id == tcid
+
+
+def test_record_test_result_linked_promotes_finding(runtime):
+    from appsec.tools.verify_tool import record_test_result
+
+    config = runtime
+    fid = _seed_finding(config)
+    tcid = _seed_test_case(config, finding_id=fid)
+    msg = record_test_result.invoke(
+        {"test_case_id": tcid, "outcome": "confirmed", "poc": "print('boom')"}
+    )
+    assert f"finding {fid}" in msg or fid in msg
+    assert FindingStore(config).get(fid).as_finding().runtime_status == "confirmed"
+    # the PoC is keyed by the finding, not the test case, when linked
+    assert PocStore(config).list()[0].finding_id == fid
+
+
+def test_record_test_result_unknown_case(runtime):
+    from appsec.tools.verify_tool import record_test_result
+
+    msg = record_test_result.invoke(
+        {"test_case_id": "TC-nope", "outcome": "confirmed", "poc": "x"}
+    )
+    assert "NOT RECORDED" in msg

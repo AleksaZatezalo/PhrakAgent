@@ -42,7 +42,7 @@ def test_tool_exposed_only_when_enabled(config):
     assert verify_tools(config) == []
     config.enable_verify = True
     names = {t.name for t in verify_tools(config)}
-    assert names == {"run_poc", "record_poc_result"}
+    assert names == {"run_poc", "record_poc_result", "record_test_result"}
 
 
 def test_landed_poc_promotes_runtime_status(runtime):
