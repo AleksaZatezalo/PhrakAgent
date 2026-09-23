@@ -35,7 +35,9 @@ include = ["appsec*"]
 # and the bundled Opengrep taint rulesets. Without these a pip-installed PHRAK
 # would lose its skills and its taint scanner.
 [tool.setuptools.package-data]
-appsec = ["skills/*/*.md"]
+# Skill playbooks, and the benchmark's ground-truth labels + target source so an
+# installed PHRAK can `benchmark` without the repo checkout.
+appsec = ["skills/*/*.md", "benchmarks/*.yaml", "benchmarks/targets/*"]
 "appsec.analyzers" = ["rules/*.yaml", "rules/*/*.yaml", "rules/*/*/*.yaml"]
 
 [tool.pytest.ini_options]

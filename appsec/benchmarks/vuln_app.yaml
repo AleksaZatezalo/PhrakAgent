@@ -1,0 +1,40 @@
+# Ground-truth labels for target/vuln_app.py — the reference target PHRAK's
+# `benchmark` command scores each model against. Every entry is a vulnerability a
+# competent reviewer WILL find in that file; recall counts how many a model
+# surfaces, precision how many of its findings map to one of these.
+#
+# Matching (see appsec/benchmark.py:score): a model finding matches an entry when
+# their CWE ids overlap, OR a keyword hits the finding's title/category AND the
+# affected file's basename matches. When `line` is set, a finding whose evidence
+# line is within +/-3 is preferred. Keep this list COMPLETE for the target: an
+# unlisted real vuln a model reports would otherwise be scored as a false hit.
+target: vuln_app.py
+findings:
+  - id: GT-SQLI
+    title: SQL injection in /user
+    cwe: CWE-89
+    file: vuln_app.py
+    line: 19
+    severity: critical
+    keywords: [sql, sqli, injection]
+  - id: GT-CMDI
+    title: Command injection in /ping
+    cwe: CWE-78
+    file: vuln_app.py
+    line: 28
+    severity: critical
+    keywords: [command, cmdi, os.popen, injection]
+  - id: GT-SECRET
+    title: Hardcoded database password
+    cwe: CWE-798
+    file: vuln_app.py
+    line: 11
+    severity: high
+    keywords: [secret, credential, password, hardcoded]
+  - id: GT-DEBUG
+    title: Flask debug mode enabled
+    cwe: CWE-489
+    file: vuln_app.py
+    line: 32
+    severity: medium
+    keywords: [debug, misconfiguration, werkzeug]

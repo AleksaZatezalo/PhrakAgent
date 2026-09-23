@@ -535,6 +535,49 @@ def cmd_add_testcase(args) -> int:
     return 0
 
 
+def cmd_benchmark(args) -> int:
+    """Compare models on the labeled target: recall, precision, token cost.
+
+    Interactive by default (prompts for provider/model/API key). Give matched
+    ``--provider``/``--model`` pairs to run non-interactively (e.g. in CI).
+    """
+    app = _load_app(args)
+    from . import benchmark
+
+    quiet = getattr(args, "quiet", False)
+    as_json = getattr(args, "json", False)
+    if not quiet and not as_json:
+        print(mini_banner())
+
+    providers = args.provider or []
+    models = args.model or []
+    if providers or models:
+        if len(providers) != len(models):
+            print(
+                "error: pass --provider and --model the same number of times "
+                "(one --model per --provider)",
+                file=sys.stderr,
+            )
+            return 2
+        cfgs = [benchmark._llm_config(p, m) for p, m in zip(providers, models)]
+    else:
+        cfgs = benchmark.collect_targets_interactive(app.config.paths.workspace)
+
+    if not cfgs:
+        phrak_print("no models selected — nothing to benchmark.")
+        return 0
+
+    rows = benchmark.run_benchmark(app, cfgs)
+    if as_json:
+        import json
+
+        print(json.dumps(benchmark.results_json(rows), indent=2))
+        return 0
+    print()
+    print(benchmark.render_table(rows))
+    return 0
+
+
 def cmd_clone(args) -> int:
     app = _load_app(args)
     print(mini_banner())
@@ -690,6 +733,23 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--preconditions", default="")
     sp.add_argument("--finding", default="", help="finding id this test verifies")
     sp.set_defaults(func=cmd_add_testcase)
+
+    sp = sub.add_parser(
+        "benchmark",
+        help="compare models on the labeled target (recall/precision/tokens)",
+    )
+    sp.add_argument(
+        "--provider",
+        action="append",
+        help="provider to test (repeatable; pair each with a --model). "
+        "Omit for interactive setup.",
+    )
+    sp.add_argument(
+        "--model",
+        action="append",
+        help="model id to test (repeatable; one per --provider)",
+    )
+    sp.set_defaults(func=cmd_benchmark)
 
     sub.add_parser("interactive", help="alias for chat").set_defaults(func=cmd_chat)
 

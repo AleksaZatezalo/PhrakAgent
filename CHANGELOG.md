@@ -13,6 +13,13 @@ so entries below group work by theme rather than by a released version boundary.
 
 ### Added
 
+- **Model benchmark** — `phrak benchmark` (and `/benchmark` in chat) runs one or
+  more provider/model combinations against a labeled vulnerable target and prints
+  a comparison table of recall, precision, and token cost. Interactive by default
+  (prompts for provider, model, and API key); pass matched `--provider`/`--model`
+  pairs to run non-interactively. Each model runs in an isolated throwaway
+  workspace with the deterministic analyzers off, so the scores reflect the model
+  itself and nothing lands in your real `.phrack/`.
 - **OpenAI and xAI Grok providers** — `phrak config` now offers `openai` and
   `grok` alongside `ollama` and `anthropic`. Both run through the OpenAI client
   (Grok via its OpenAI-compatible `https://api.x.ai/v1` endpoint); keys are

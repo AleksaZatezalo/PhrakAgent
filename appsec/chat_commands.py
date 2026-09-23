@@ -198,6 +198,20 @@ def _h_run(ctx: ChatContext) -> None:
     print()
 
 
+def _h_benchmark(ctx: ChatContext) -> None:
+    from . import benchmark
+
+    app = ctx.app
+    cfgs = benchmark.collect_targets_interactive(app.config.paths.workspace)
+    if not cfgs:
+        phrak_print("no models selected — nothing to benchmark.")
+        return
+    rows = benchmark.run_benchmark(app, cfgs)
+    print()
+    print(benchmark.render_table(rows))
+    print()
+
+
 def _h_route(ctx: ChatContext) -> None:
     from .cli import _land_report
 
@@ -423,6 +437,13 @@ COMMANDS: tuple[Command, ...] = (
         "/route <text>",
         "auto-route to the single best-fit agent",
         _h_route,
+    ),
+    Command(
+        ("benchmark",),
+        "analyze",
+        "/benchmark",
+        "compare models on the labeled target (recall/precision/tokens)",
+        _h_benchmark,
     ),
     Command(
         ("see_threatmodel", "see-threatmodel"),
