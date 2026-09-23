@@ -235,30 +235,66 @@ def record_poc_result(
         )
     from ..store import FindingStore
 
-    store = FindingStore(require_config())
-    detail = " ".join(p for p in (note.strip(), _poc_tail(poc)) if p).strip()
+    cfg = require_config()
+    store = FindingStore(cfg)
+    # Resolve the finding first so the persisted PoC is named by its canonical id
+    # and a bad id fails fast (rather than after saving an orphan script).
+    rec0 = store.get(finding_id)
+    if rec0 is None:
+        return (
+            f"NOT RECORDED — no finding matching {finding_id!r}. "
+            "Use the finding id shown in your context."
+        )
+
+    saved = _save_poc(cfg, rec0.id, poc)
+    tail = _poc_tail(poc)
+    where = f"(saved: {saved})" if saved else ""
+    detail = " ".join(p for p in (note.strip(), tail, where) if p).strip()
+
     if outcome == "inconclusive":
         rec, msg = store.add_note(
-            finding_id, f"runtime PoC inconclusive: {detail or 'no detail given'}"
+            rec0.id, f"runtime PoC inconclusive: {detail or 'no detail given'}"
         )
-        if rec is None:
-            return f"NOT RECORDED — {msg}. Use the finding id from your context."
-        return f"RECORDED inconclusive on {rec.id} (status unchanged; noted)."
+        return f"RECORDED inconclusive on {rec.id} (status unchanged; noted). {where}".strip()
 
     status = _OUTCOME_STATUS[outcome]
     # A landed PoC is the strongest evidence there is, so it raises confidence; a
     # non-landing one leaves confidence to the static analysis that reported it.
     conf = 0.95 if outcome == "confirmed" else None
     rec, msg = store.set_status(
-        finding_id,
+        rec0.id,
         status,
         actor="runtime",
         note=f"sandboxed PoC: {detail or outcome}",
         confidence=conf,
     )
-    if rec is None:
-        return f"NOT RECORDED — {msg}. Use the finding id shown in your context."
-    return f"RECORDED runtime verdict — {msg}."
+    return f"RECORDED runtime verdict — {msg}. {where}".strip()
+
+
+def _save_poc(cfg, finding_id: str, poc: str) -> str:
+    """Persist a PoC script under ``.phrack/pocs`` so the run is auditable.
+
+    Named ``<FND-id>-<UTC-timestamp>.<py|sh>`` so successive attempts on the same
+    finding never clobber each other. Best-effort: a write failure returns "" and
+    the verdict is still recorded (the one-line tail stays in the finding note).
+    """
+    poc = (poc or "").strip()
+    if not poc:
+        return ""
+    import re
+    from datetime import datetime, timezone
+
+    first = poc.splitlines()[0] if poc else ""
+    ext = "sh" if re.match(r"^#!.*\b(sh|bash|zsh)\b", first) else "py"
+    try:
+        d = cfg.pocs_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        path = d / f"{finding_id}-{ts}.{ext}"
+        path.write_text(poc)
+        return str(path)
+    except Exception:
+        return ""
 
 
 def _poc_tail(poc: str) -> str:

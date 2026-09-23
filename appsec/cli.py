@@ -535,6 +535,23 @@ def cmd_add_testcase(args) -> int:
     return 0
 
 
+def cmd_verify(args) -> int:
+    """Run the sandboxed PoC agent against one finding by id (opt-in)."""
+    app = _load_app(args)
+    from .verify_cmds import build_verify_task
+
+    task, err = build_verify_task(app, args.id)
+    if err:
+        print(f"error: {err}", file=sys.stderr)
+        return 2
+    print(mini_banner())
+    phrak_print(f"verifying {BGREEN}{args.id}{RESET} in a sandbox ...\n")
+    out = app.orchestrator.run_agent("verify", task)
+    render_markdown(out)
+    _land_report(app, app.orchestrator.save_agent_report("verify", task, out))
+    return 0
+
+
 def cmd_benchmark(args) -> int:
     """Compare models on the labeled target: recall, precision, token cost.
 
@@ -733,6 +750,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--preconditions", default="")
     sp.add_argument("--finding", default="", help="finding id this test verifies")
     sp.set_defaults(func=cmd_add_testcase)
+
+    sp = sub.add_parser(
+        "verify",
+        help="run a sandboxed PoC against one finding by id (opt-in: enable_verify)",
+    )
+    sp.add_argument("id", help="finding id to verify (e.g. FND-284b4aac0d)")
+    sp.set_defaults(func=cmd_verify)
 
     sp = sub.add_parser(
         "benchmark",

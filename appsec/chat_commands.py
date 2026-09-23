@@ -198,6 +198,23 @@ def _h_run(ctx: ChatContext) -> None:
     print()
 
 
+def _h_verify(ctx: ChatContext) -> None:
+    from .cli import _land_report
+    from .verify_cmds import build_verify_task
+
+    app = ctx.app
+    task, err = build_verify_task(app, ctx.rest)
+    if err:
+        phrak_print(err)
+        return
+    print()
+    phrak_print(f"verifying {BGREEN}{ctx.rest.strip()}{RESET} in a sandbox ...\n")
+    out = app.orchestrator.run_agent("verify", task)
+    render_markdown(out)
+    _land_report(app, app.orchestrator.save_agent_report("verify", task, out))
+    print()
+
+
 def _h_benchmark(ctx: ChatContext) -> None:
     from . import benchmark
 
@@ -444,6 +461,13 @@ COMMANDS: tuple[Command, ...] = (
         "/benchmark",
         "compare models on the labeled target (recall/precision/tokens)",
         _h_benchmark,
+    ),
+    Command(
+        ("verify",),
+        "findings",
+        "/verify <id>",
+        "run a sandboxed PoC against one finding (opt-in: enable_verify)",
+        _h_verify,
     ),
     Command(
         ("see_threatmodel", "see-threatmodel"),

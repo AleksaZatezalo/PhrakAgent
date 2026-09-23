@@ -314,10 +314,17 @@ class Orchestrator:
     def plan_dag(self, request: str) -> list[Task]:
         """Plan a dependency graph of tasks. Falls back to a linear DAG."""
         # Only inject the verify-agent scheduling rule when it's actually
-        # available — otherwise the planner would confidently emit a task
-        # that plan_dag would then drop and the run would proceed without
-        # the verification step the user thought they configured.
-        verify_rule = _VERIFY_RULE if "verify" in self.registry.names() else ""
+        # available AND auto-verify is opted into. `enable_verify` merely makes
+        # the agent runnable on demand (`phrak verify <id>` / `/verify <id>`);
+        # auto-scheduling every full run to execute PoCs is a second, off-by-
+        # default switch (`auto_verify`). Without both, the planner never emits a
+        # verify task, so a run can't silently run attacker code.
+        verify_rule = (
+            _VERIFY_RULE
+            if getattr(self.config, "auto_verify", False)
+            and "verify" in self.registry.names()
+            else ""
+        )
         prompt = _DAG_PLANNER_PROMPT.format(
             catalog=self.registry.catalog(only_plannable=True),
             request=request,

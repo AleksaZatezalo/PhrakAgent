@@ -228,6 +228,11 @@ class Config:
     # default — running attacker payloads (even against your own code) is a
     # policy decision, not a technical one.
     enable_verify: bool = False
+    # Whether the DAG planner may AUTO-schedule verify inside a full assessment.
+    # Off by default even when enable_verify is on: enabling the agent lets you
+    # run it deliberately (`phrak verify <id>` / `/verify <id>`) without every
+    # `run` silently executing PoCs. Requires enable_verify to have any effect.
+    auto_verify: bool = False
     # Container runtime for the verify agent. auto = docker if present, else podman.
     verify_runtime: str = "auto"
     # Base image PoCs execute in. Kept slim; must have python3 + curl.
@@ -280,6 +285,7 @@ class Config:
             keep_reports=raw.get("keep_reports", 50),
             enable_git_clone=bool(raw.get("enable_git_clone", False)),
             enable_verify=bool(raw.get("enable_verify", False)),
+            auto_verify=bool(raw.get("auto_verify", False)),
             verify_runtime=str(raw.get("verify_runtime", "auto")),
             verify_image=str(raw.get("verify_image", "python:3.12-slim")),
             verify_timeout_s=int(raw.get("verify_timeout_s", 30)),
@@ -359,6 +365,15 @@ class Config:
     def history_file(self) -> Path:
         return self.phrack_dir / "history"
 
+    def pocs_dir(self) -> Path:
+        """Where the verify agent persists the PoC scripts it runs.
+
+        Kept out of ``reports/`` on purpose: these are executable
+        attacker-input scripts, and a reviewer wants them findable, replayable,
+        and clearly separated from prose reports. See ``tools/verify_tool.py``.
+        """
+        return self.phrack_dir / "pocs"
+
     def credentials_file(self) -> Path:
         """The workspace's provider-API-key file (see ``credentials.py``)."""
         return self.phrack_dir / CREDENTIALS_FILENAME
@@ -378,6 +393,7 @@ class Config:
             "keep_reports": self.keep_reports,
             "enable_git_clone": self.enable_git_clone,
             "enable_verify": self.enable_verify,
+            "auto_verify": self.auto_verify,
             "verify_runtime": self.verify_runtime,
             "verify_image": self.verify_image,
             "verify_timeout_s": self.verify_timeout_s,
