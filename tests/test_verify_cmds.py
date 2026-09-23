@@ -11,8 +11,9 @@ from types import SimpleNamespace
 import pytest
 
 from appsec.models.findings import FindingEvidence, SecurityFinding
+from appsec.poc_store import PocStore
 from appsec.store import FindingStore
-from appsec.tools.verify_tool import _save_poc, record_poc_result
+from appsec.tools.verify_tool import record_poc_result
 from appsec.verify_cmds import build_verify_task
 
 
@@ -36,25 +37,6 @@ def _app(config, verify_names=("verify", "code_review")):
 
 
 # ---------------------------------------------------------------- PoC storage
-def test_save_poc_writes_python_by_default(config):
-    path = _save_poc(config, "FND-abc", "print('hi')")
-    assert path.endswith(".py")
-    from pathlib import Path
-
-    p = Path(path)
-    assert p.parent == config.pocs_dir()
-    assert p.read_text() == "print('hi')"
-
-
-def test_save_poc_detects_shell_shebang(config):
-    path = _save_poc(config, "FND-abc", "#!/bin/bash\necho hi")
-    assert path.endswith(".sh")
-
-
-def test_save_poc_empty_is_noop(config):
-    assert _save_poc(config, "FND-abc", "   ") == ""
-
-
 def test_record_poc_result_persists_and_promotes(runtime):
     config = runtime
     fid = _seed_finding(config)
@@ -66,14 +48,16 @@ def test_record_poc_result_persists_and_promotes(runtime):
             "poc": "print('rows: 1,2,3')",
         }
     )
-    assert "RECORDED" in msg and "saved:" in msg
+    assert "RECORDED" in msg and "poc POC-" in msg
     # the finding is now runtime-confirmed
     rec = FindingStore(config).get(fid)
     assert rec.as_finding().runtime_status == "confirmed"
-    # exactly one PoC script landed under .phrack/pocs
-    pocs = list(config.pocs_dir().glob(f"{fid}-*.py"))
+    # exactly one PoC landed in the store, linked to the finding
+    pocs = PocStore(config).list()
     assert len(pocs) == 1
-    assert "rows" in pocs[0].read_text()
+    assert pocs[0].finding_id == fid
+    assert pocs[0].outcome == "confirmed"
+    assert "rows" in PocStore(config).read_script(pocs[0])
 
 
 def test_record_poc_result_unknown_id(runtime):
@@ -81,8 +65,7 @@ def test_record_poc_result_unknown_id(runtime):
         {"finding_id": "FND-nope", "outcome": "confirmed", "poc": "x"}
     )
     assert "NOT RECORDED" in msg
-    # nothing persisted for a bad id
-    assert not list(runtime.pocs_dir().glob("*")) if runtime.pocs_dir().exists() else True
+    assert PocStore(runtime).list() == []  # nothing persisted for a bad id
 
 
 # ------------------------------------------------------------ task building
